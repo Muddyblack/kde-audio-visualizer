@@ -1,9 +1,10 @@
 <p align="center">
-  <img src="readme/logo.png" width="200" alt="Plasma Audio Wave Visualizer Logo">
+  <img src="package/icon.png" width="200" alt="Plasma Audio Wave Visualizer Logo">
 </p>
 
 # Plasma Audio Wave Visualizer
 
+[![KDE Store](https://img.shields.io/badge/KDE%20Store-Download-blue?logo=kde)](https://www.opendesktop.org/p/2359422/)
 
 A glassy audio visualizer plasmoid for KDE Plasma 6. Renders mirrored waveform that reacts to whatever is playing system-wide (via [cava]), alongside MPRIS track metadata, album art, transport controls, and a seekable progress bar.
 
@@ -40,7 +41,7 @@ kpackagetool6 -t Plasma/Applet -u package
 
 Then add the widget from Plasma's "Add Widgets" panel.
 
-To remove: `kpackagetool6 -t Plasma/Applet -r org.muddyblack.audioWaveVisualizer`
+To remove: `kpackagetool6 -t Plasma/Applet -r org.muddyblack.plasmaAudioVisualizer`
 
 ### NixOS (flake)
 

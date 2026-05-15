@@ -65,7 +65,7 @@ To remove: `kpackagetool6 -t Plasma/Applet -r org.muddyblack.plasmaAudioVisualiz
         })
       ];
     };
-  };
+  }
 }
 ```
 
@@ -78,7 +78,9 @@ To remove: `kpackagetool6 -t Plasma/Applet -r org.muddyblack.plasmaAudioVisualiz
 
 ## How it works
 
-The widget can't read PipeWire directly from QML, so a small shell helper (`feeder.sh`) runs `cava` in the background and atomically writes the latest bars to `$XDG_RUNTIME_DIR/audio-wave-widget/bars`. The QML side polls that file at ~30 fps. A `flock` ensures only one feeder runs even if Plasma respawns the widget. On unload, `pkill -f` cleans up the helper.
+For a detailed explanation of the architecture and data flow, see the [Architecture Documentation](docs/workflow.md).
+
+In short: the widget uses a small shell helper (`feeder.sh`) to run `cava` in the background and atomically writes the latest bars to `$XDG_RUNTIME_DIR/audio-wave-widget/bars`. The QML side polls that file at ~30 fps.
 
 ## Tweaking
 

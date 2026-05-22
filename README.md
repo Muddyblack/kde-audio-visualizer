@@ -2,9 +2,16 @@
   <img src="./package/icon.png" width="200" alt="Plasma Audio Wave Visualizer Logo">
 </p>
 
-# Plasma Audio Wave Visualizer
+<h1 align="center">Plasma Audio Wave Visualizer</h1>
 
-[![KDE Store](https://img.shields.io/badge/KDE%20Store-Download-blue?logo=kde)](https://www.opendesktop.org/p/2359422/)
+<p align="center">
+  <a href="https://www.opendesktop.org/p/2359422/">
+    <img src="https://img.shields.io/badge/KDE_Store-Download-1d99f3?style=for-the-badge&logo=kde&logoColor=white" alt="KDE Store Download" />
+  </a>
+  <img src="https://img.shields.io/badge/KDE_Plasma-6.0%2B-1d99f3?style=for-the-badge&logo=kde&logoColor=white" alt="KDE Plasma 6.0+" />
+  <img src="https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge" alt="License: MIT" />
+  <img src="https://img.shields.io/github/downloads/Muddyblack/kde-audio-visualizer/total?style=for-the-badge&logo=kdeplasma&logoColor=white&label=Downloads&color=blue" alt="Downloads" />
+</p>
 
 <p align="center">
   <img src="./readme/demo.svg" alt="Widget demo" width="680"/>

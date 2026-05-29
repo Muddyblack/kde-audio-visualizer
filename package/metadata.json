@@ -13,7 +13,7 @@
         "Id": "org.muddyblack.plasmaAudioVisualizer",
         "License": "MIT",
         "Name": "Plasma Audio Visualizer",
-        "Version": "1.1.1",
+        "Version": "1.1.2",
         "Website": "https://github.com/muddyblack/plasma-audio-visualizer"
     },
     "X-Plasma-API-Minimum-Version": "6.0"

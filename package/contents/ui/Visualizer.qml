@@ -56,37 +56,40 @@ Item {
         connectedSources: []
         onNewData: function (source, data) {
             disconnectSource(source);
-            const line = (data["stdout"] || "").trim();
-            if (!line)
-                return;
-            const parts = line.split(";");
-            if (parts.length < vis.numBars)
-                return;
-            const out = [];
-            let isZero = true;
-            for (let i = 0; i < vis.numBars; i++) {
-                const v = parseFloat(parts[i]);
-                const val = isNaN(v) ? 0 : v;
-                if (val > 0)
-                    isZero = false;
-                out.push(val);
-            }
-            vis.bars = out;
-
-            if (isZero) {
-                if (vis.idleCounter < 90) { // ~3 seconds at 30 FPS
-                    vis.idleCounter++;
-                } else {
-                    pollTimer.interval = 500; // Slow down to 2 FPS when idle
-                }
-            } else {
-                vis.idleCounter = 0;
-                pollTimer.interval = 33; // Full speed (30 FPS) when active
-            }
+            vis.handleData((data["stdout"] || "").trim());
         }
         function read() {
             if (vis.resolvedBarsPath)
                 connectSource("cat " + vis.resolvedBarsPath);
+        }
+    }
+
+    function handleData(line) {
+        if (!line)
+            return;
+        const parts = line.split(";");
+        if (parts.length < numBars)
+            return;
+        const out = [];
+        let isZero = true;
+        for (let i = 0; i < numBars; i++) {
+            const v = parseFloat(parts[i]);
+            const val = isNaN(v) ? 0 : v;
+            if (val > 0)
+                isZero = false;
+            out.push(val);
+        }
+        bars = out;
+
+        if (isZero) {
+            if (idleCounter < 90) { // ~3 seconds at 30 FPS
+                idleCounter++;
+            } else {
+                pollTimer.interval = 500; // Slow down to 2 FPS when idle
+            }
+        } else {
+            idleCounter = 0;
+            pollTimer.interval = 33; // Full speed (30 FPS) when active
         }
     }
 

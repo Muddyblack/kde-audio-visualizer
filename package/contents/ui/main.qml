@@ -137,15 +137,32 @@ PlasmoidItem {
                 antialiasing: true
                 renderStrategy: Canvas.Cooperative
 
+                // Only repaint the mask while the cut-out effect is actually
+                // live (showBg + cutBg). Otherwise this Canvas + its MultiEffect
+                // re-render every frame feeding a mask nothing consumes.
+                readonly property bool maskActive: plasmoid.configuration.showBg && plasmoid.configuration.cutBg
                 Connections {
                     target: vis
                     function onBarsChanged() {
-                        waveMask.requestPaint();
+                        if (waveMask.maskActive)
+                            waveMask.requestPaint();
                     }
                 }
                 Connections {
                     target: root
                     function onIsPlayingChanged() {
+                        if (waveMask.maskActive)
+                            waveMask.requestPaint();
+                    }
+                }
+                // Repaint once when the effect is toggled on so the mask is fresh.
+                Connections {
+                    target: plasmoid.configuration
+                    ignoreUnknownSignals: true
+                    function onCutBgChanged() {
+                        waveMask.requestPaint();
+                    }
+                    function onShowBgChanged() {
                         waveMask.requestPaint();
                     }
                 }
@@ -989,9 +1006,13 @@ PlasmoidItem {
                         }
                     }
 
+                    // Only predict position while actually playing. While paused
+                    // the position is static, and onIsPlayingChanged re-syncs the
+                    // displayed position, so a 20fps tick here just keeps the
+                    // shared render/event loop needlessly warm.
                     Timer {
                         interval: 50
-                        running: root.hasPlayer
+                        running: root.hasPlayer && root.isPlaying
                         repeat: true
                         onTriggered: progressBar.tick()
                     }

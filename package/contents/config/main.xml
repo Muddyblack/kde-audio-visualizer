@@ -18,7 +18,7 @@
             <default>100</default>
         </entry>
         <entry name="framerate" type="Int">
-            <default>60</default>
+            <default>24</default>
         </entry>
         <entry name="noiseReduction" type="Double">
             <default>0.77</default>

@@ -64,6 +64,8 @@ Item {
         }
     }
 
+    readonly property int pollInterval: Math.round(1000 / plasmoid.configuration.framerate)
+
     function handleData(line) {
         if (!line)
             return;
@@ -82,20 +84,20 @@ Item {
         bars = out;
 
         if (isZero) {
-            if (idleCounter < 90) { // ~3 seconds at 30 FPS
+            if (idleCounter < plasmoid.configuration.framerate * 3) {
                 idleCounter++;
             } else {
                 pollTimer.interval = 500; // Slow down to 2 FPS when idle
             }
         } else {
             idleCounter = 0;
-            pollTimer.interval = 33; // Full speed (30 FPS) when active
+            pollTimer.interval = vis.pollInterval;
         }
     }
 
     Timer {
         id: pollTimer
-        interval: 33
+        interval: vis.pollInterval
         running: vis.active
         repeat: true
         onTriggered: reader.read()
@@ -111,7 +113,7 @@ Item {
 
     function restart() {
         vis.idleCounter = 0;
-        pollTimer.interval = 33;
+        pollTimer.interval = vis.pollInterval;
         feederLauncher.killFeeder();
         restartTimer.start();
     }

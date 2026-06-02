@@ -32,6 +32,12 @@ PlasmoidItem {
 
     property string artUrl: ""
 
+    // When the album art is already shown big as the card background, the small
+    // square thumbnail on the left is redundant — hide it so the controls dock
+    // gets the room instead. Falls back to showing the thumb if there's no art
+    // yet (so art-bg mode without loaded art doesn't look empty).
+    readonly property bool artIsBackground: plasmoid.configuration.showBg && plasmoid.configuration.artBg && artUrl !== ""
+
     function _refreshArtUrl() {
         const p = mpris2Model.currentPlayer;
         if (!p || !plasmoid.configuration.showMpris) {
@@ -98,16 +104,24 @@ PlasmoidItem {
             color: "transparent"
             clip: true
 
-            // Blurred art fill — only when artBg is enabled and art is loaded
+            // Crisp art fill — light blur keeps the cover clearly recognizable
+            // (premium "bold cover" look) while still softening hard detail so
+            // the wave/text read on top. Brighter + saturated vs the old heavy
+            // frosted treatment.
             MultiEffect {
                 anchors.fill: parent
                 source: bgArtImg
                 blurEnabled: true
-                blur: 1.0
-                blurMax: 64
-                saturation: 0.3
-                brightness: -0.25
+                // User-controlled blur (0 = crisp cover, 1 = heavy frost).
+                blur: plasmoid.configuration.artBgBlur
+                blurMax: 48
+                saturation: 0.85
                 opacity: (plasmoid.configuration.artBg && bgArtImg.status === Image.Ready) ? 1.0 : 0.0
+                Behavior on blur {
+                    NumberAnimation {
+                        duration: 250
+                    }
+                }
                 Behavior on opacity {
                     NumberAnimation {
                         duration: 400
@@ -115,16 +129,26 @@ PlasmoidItem {
                 }
             }
 
-            // Flat color — dark tint over art, or solid bgColor when art bg is off
+            // Whether the album art is actually being used as the fill right now.
+            property bool artMode: plasmoid.configuration.artBg && bgArtImg.status === Image.Ready
+
+            // Solid-colour fill — ONLY when not in art mode. Kept as its own
+            // rectangle (no gradient on it) so there's never a color↔gradient
+            // conflict on a single Rectangle, which was painting the whole card
+            // black.
             Rectangle {
                 anchors.fill: parent
-                color: (plasmoid.configuration.artBg && bgArtImg.status === Image.Ready) ? Qt.rgba(0, 0, 0, 0.35) : plasmoid.configuration.bgColor
-                Behavior on color {
-                    ColorAnimation {
-                        duration: 400
-                    }
-                }
+                visible: !backgroundCard.artMode
+                color: plasmoid.configuration.bgColor
             }
+
+            // NOTE: the art-darkness scrim is intentionally NOT here. backgroundCard
+            // is visible:false and used only as a texture source for
+            // backgroundCardEffect, so changing a child's opacity inside it does
+            // not re-trigger the MultiEffect's texture capture (blur works because
+            // it's a live property on the effect pipeline; child opacity does not).
+            // The scrim lives in the live scene on top of the effect instead —
+            // see `artScrim` below.
 
             // Border on top
             Rectangle {
@@ -162,6 +186,40 @@ PlasmoidItem {
             layer.enabled: true
         }
 
+        // Art-darkness scrim — LIVE in the scene (not inside the captured
+        // backgroundCard source), so its opacity reacts instantly to the slider.
+        // A plain Rectangle's own rounded gradient fill stays inside its corners
+        // (the earlier corner-leak only affected clipped CHILDREN), so radius +
+        // antialiasing is enough here without a separate mask pass.
+        Rectangle {
+            id: artScrim
+            anchors.fill: parent
+            antialiasing: true
+            radius: plasmoid.configuration.bgRadius
+            visible: plasmoid.configuration.showBg && plasmoid.configuration.artBg && bgArtImg.status === Image.Ready
+            // 0 = art fully visible · 1 = strongly dimmed for readability.
+            opacity: plasmoid.configuration.artBgDim
+            gradient: Gradient {
+                GradientStop {
+                    position: 0.0
+                    color: Qt.rgba(0, 0, 0, 0.72)
+                }
+                GradientStop {
+                    position: 0.5
+                    color: Qt.rgba(0, 0, 0, 0.85)
+                }
+                GradientStop {
+                    position: 1.0
+                    color: Qt.rgba(0, 0, 0, 0.98)
+                }
+            }
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: 200
+                }
+            }
+        }
+
         RowLayout {
             anchors.fill: parent
             anchors.leftMargin: plasmoid.configuration.showBg ? 10 : 0
@@ -178,12 +236,25 @@ PlasmoidItem {
                 Layout.alignment: Qt.AlignVCenter
                 visible: plasmoid.configuration.showMpris
 
+                // When the thumbnail is hidden (art-bg mode) the dock is the only
+                // child and floats dead-centre. This flexible spacer pushes it
+                // toward the lower third so it sits over the darker part of the
+                // scrim and lines up better with the track text beside it.
+                Item {
+                    Layout.fillHeight: true
+                    Layout.preferredHeight: 1
+                    visible: !artBox.visible
+                }
+
                 Item {
                     id: artBox
-                    visible: plasmoid.configuration.showArtThumb
+                    // Hidden when the art is already the card background (redundant),
+                    // unless the user opts to keep the sharp thumbnail layered over
+                    // the blurred/darkened background (artBgKeepThumb).
+                    visible: plasmoid.configuration.showArtThumb && (!root.artIsBackground || plasmoid.configuration.artBgKeepThumb)
                     Layout.fillHeight: true
                     Layout.maximumHeight: 72
-                    Layout.preferredWidth: Math.min(artBox.height, 72)
+                    Layout.preferredWidth: visible ? Math.min(artBox.height, 72) : 0
                     Layout.maximumWidth: 72
                     Layout.alignment: Qt.AlignHCenter
                     width: Math.min(height, 72)
@@ -252,30 +323,33 @@ PlasmoidItem {
                     Rectangle {
                         anchors.fill: parent
                         radius: height / 2
-                        // Use custom dock bg color when not using system default
-                        color: plasmoid.configuration.useSystemDockBg ? Qt.rgba(1, 1, 1, 0.09) : plasmoid.configuration.customDockBgColor
-                        border.color: Qt.rgba(1, 1, 1, 0.22)
+                        // Darker, cleaner glass: a deeper translucent base reads as
+                        // a single calm surface against busy album art, instead of
+                        // the milky look a light tint gives over a bright cover.
+                        color: plasmoid.configuration.useSystemDockBg ? Qt.rgba(0, 0, 0, 0.28) : plasmoid.configuration.customDockBgColor
+                        border.color: Qt.rgba(1, 1, 1, 0.16)
                         border.width: 1
 
                         layer.enabled: true
                         layer.effect: MultiEffect {
                             shadowEnabled: true
-                            shadowColor: Qt.rgba(0, 0, 0, 0.25)
-                            shadowOpacity: 0.3
-                            shadowBlur: 0.2
+                            shadowColor: Qt.rgba(0, 0, 0, 0.35)
+                            shadowOpacity: 0.35
+                            shadowBlur: 0.25
                             shadowVerticalOffset: 1
                         }
 
+                        // Soft top highlight — the glassy sheen catching light.
                         Rectangle {
                             anchors.left: parent.left
                             anchors.right: parent.right
                             anchors.top: parent.top
-                            anchors.leftMargin: 8
-                            anchors.rightMargin: 8
+                            anchors.leftMargin: 9
+                            anchors.rightMargin: 9
                             anchors.topMargin: 1
                             height: 1
                             radius: 0.5
-                            color: Qt.rgba(1, 1, 1, 0.25)
+                            color: Qt.rgba(1, 1, 1, 0.18)
                         }
                     }
 
@@ -464,6 +538,15 @@ PlasmoidItem {
                         }
                     }
                 }
+
+                // Smaller counter-spacer: with the top spacer ~2x this, the dock
+                // settles in the lower third rather than hard against the bottom.
+                Item {
+                    Layout.fillHeight: true
+                    Layout.preferredHeight: 1
+                    Layout.maximumHeight: 10
+                    visible: !artBox.visible
+                }
             }
 
             // ── Waveform + text ───────────────────────────────────────────────
@@ -505,9 +588,6 @@ PlasmoidItem {
                             wave.requestPaint();
                         }
                         function onGlowWaveChanged() {
-                            wave.requestPaint();
-                        }
-                        function onCutBgChanged() {
                             wave.requestPaint();
                         }
                         function onVisualizerTypeChanged() {
@@ -586,8 +666,7 @@ PlasmoidItem {
                                 }
                                 ctx.stroke();
 
-                                const isCut = plasmoid.configuration.showBg && plasmoid.configuration.cutBg;
-                                if (plasmoid.configuration.fillWave && !isCut) {
+                                if (plasmoid.configuration.fillWave) {
                                     ctx.shadowBlur = 0;
                                     ctx.lineTo(width, mid);
                                     ctx.lineTo(0, mid);

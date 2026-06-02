@@ -5,10 +5,16 @@ Item {
     id: vis
 
     property int numBars: plasmoid.configuration.numBars
-    property real maxRange: 600.0
+    property real maxRange: 1000.0
     property var bars: Array(numBars).fill(0)
     property bool active: true
     property int idleCounter: 0
+
+    // plasmoid.visible is undefined inside plasmoidviewer (only the real shell
+    // sets it), which makes `running: active && plasmoid.visible` evaluate to
+    // undefined → timers never start → no data → frozen idle line. Coerce to a
+    // real bool, defaulting to visible when the property is absent.
+    readonly property bool plasmoidVisible: (plasmoid.visible === undefined) ? true : plasmoid.visible
 
     readonly property string feederPath: Qt.resolvedUrl("../code/feeder.sh").toString().replace(/^file:\/\//, "")
 
@@ -66,24 +72,38 @@ Item {
 
     readonly property int pollInterval: Math.round(1000 / plasmoid.configuration.framerate)
 
+    // Exponential moving average toward each new cava frame. Cava already
+    // smooths over time, but reading a fresh frame every poll still snaps
+    // visibly; blending softens the motion without adding latency you'd notice.
+    // 0 = frozen, 1 = no smoothing (raw snap). ~0.55 reads as fluid.
+    readonly property real smoothing: 0.55
+
+    // Treat the bottom slice of the range as silence. Cava's noise floor and
+    // residual smoothing leave tiny non-zero values even when nothing plays, so
+    // a strict `val > 0` idle test never trips. Anything under this is "quiet".
+    readonly property real idleThreshold: maxRange * 0.012
+
     function handleData(line) {
         if (!line)
             return;
         const parts = line.split(";");
         if (parts.length < numBars)
             return;
+        const prev = bars;
         const out = [];
-        let isZero = true;
+        let isQuiet = true;
+        const a = smoothing;
         for (let i = 0; i < numBars; i++) {
             const v = parseFloat(parts[i]);
-            const val = isNaN(v) ? 0 : v;
-            if (val > 0)
-                isZero = false;
-            out.push(val);
+            const target = isNaN(v) ? 0 : v;
+            if (target > idleThreshold)
+                isQuiet = false;
+            const p = prev[i] || 0;
+            out.push(p + a * (target - p));
         }
         bars = out;
 
-        if (isZero) {
+        if (isQuiet) {
             if (idleCounter < plasmoid.configuration.framerate * 3) {
                 idleCounter++;
             } else {
@@ -98,14 +118,18 @@ Item {
     Timer {
         id: pollTimer
         interval: vis.pollInterval
-        running: vis.active && plasmoid.visible
+        running: vis.active && vis.plasmoidVisible
         repeat: true
         onTriggered: reader.read()
     }
 
+    // Keep the feeder alive. spawn() is guarded by flock in feeder.sh, so a
+    // re-spawn while cava is healthy is a cheap no-op (it exits immediately).
+    // We still avoid hammering it: fire once on start to get cava up fast, then
+    // fall back to a slow 30s heartbeat that recovers from a crashed feeder.
     Timer {
-        interval: 5000
-        running: plasmoid.visible
+        interval: 30000
+        running: vis.plasmoidVisible
         repeat: true
         triggeredOnStart: true
         onTriggered: feederLauncher.spawn()

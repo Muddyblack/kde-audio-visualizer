@@ -32,7 +32,10 @@ KCM.SimpleKCM {
     property alias cfg_bgColor: bgColorButton.color
     property alias cfg_bgRadius: bgRadiusSlider.value
     property alias cfg_artBg: artBgCheckBox.checked
+    property alias cfg_artBgDim: artBgDimSlider.value
+    property alias cfg_artBgBlur: artBgBlurSlider.value
     property alias cfg_showArtThumb: showArtThumbCheckBox.checked
+    property alias cfg_artBgKeepThumb: artBgKeepThumbCheckBox.checked
 
     Kirigami.FormLayout {
         // Cava Settings Section
@@ -208,8 +211,73 @@ KCM.SimpleKCM {
         QQC.CheckBox {
             id: artBgCheckBox
             Kirigami.FormData.label: i18n("Art Background:")
-            text: i18n("Use album art as blurred background")
+            text: i18n("Use album art as the background")
+            enabled: showMprisCheckBox.checked
             visible: showBgCheckBox.checked
+        }
+
+        QQC.Label {
+            Kirigami.FormData.label: ""
+            visible: showBgCheckBox.checked && artBgCheckBox.checked
+            text: i18n("Cover art fills the card. By default the small thumbnail is hidden since the art is already shown. Use the sliders below to tune blur and darkness.")
+            font: Kirigami.Theme.smallFont
+            opacity: 0.7
+            wrapMode: Text.WordWrap
+            Layout.fillWidth: true
+            Layout.maximumWidth: Kirigami.Units.gridUnit * 20
+        }
+
+        QQC.CheckBox {
+            id: artBgKeepThumbCheckBox
+            Kirigami.FormData.label: ""
+            text: i18n("Keep the sharp thumbnail over the background")
+            // Lets the crisp cover sit on top of its own blurred/darkened self
+            // (Spotify-style). Needs the thumbnail master toggle on too.
+            enabled: showArtThumbCheckBox.checked
+            visible: showBgCheckBox.checked && artBgCheckBox.checked && showMprisCheckBox.checked
+        }
+
+        QQC.Label {
+            Kirigami.FormData.label: ""
+            visible: showBgCheckBox.checked && artBgCheckBox.checked && !showMprisCheckBox.checked
+            text: i18n("Enable “Show album art and track info” above to use art backgrounds.")
+            font: Kirigami.Theme.smallFont
+            color: Kirigami.Theme.neutralTextColor
+            wrapMode: Text.WordWrap
+            Layout.fillWidth: true
+            Layout.maximumWidth: Kirigami.Units.gridUnit * 20
+        }
+
+        RowLayout {
+            visible: showBgCheckBox.checked && artBgCheckBox.checked
+            Kirigami.FormData.label: i18n("Art Blur:")
+            QQC.Slider {
+                id: artBgBlurSlider
+                from: 0.0
+                to: 1.0
+                stepSize: 0.02
+                Layout.fillWidth: true
+            }
+            QQC.Label {
+                text: Math.round(artBgBlurSlider.value * 100) + "%"
+                Layout.minimumWidth: 40
+            }
+        }
+
+        RowLayout {
+            visible: showBgCheckBox.checked && artBgCheckBox.checked
+            Kirigami.FormData.label: i18n("Art Darkness:")
+            QQC.Slider {
+                id: artBgDimSlider
+                from: 0.0
+                to: 1.0
+                stepSize: 0.02
+                Layout.fillWidth: true
+            }
+            QQC.Label {
+                text: Math.round(artBgDimSlider.value * 100) + "%"
+                Layout.minimumWidth: 40
+            }
         }
 
         KQuickControls.ColorButton {

@@ -9,6 +9,7 @@ Item {
     property var bars: Array(numBars).fill(0)
     property bool active: true
     property int idleCounter: 0
+    property bool restarting: false
 
     // plasmoid.visible is undefined inside plasmoidviewer (only the real shell
     // sets it), which makes `running: active && plasmoid.visible` evaluate to
@@ -30,7 +31,7 @@ Item {
             connectSource("bash " + vis.feederPath + " " + args);
         }
         function killFeeder() {
-            connectSource("pkill -f " + vis.feederPath + " ; pkill -f 'cava -p .*audio-wave-widget'");
+            connectSource("bash -lc \"pkill -f '" + vis.feederPath + "'; pkill -f 'cava -p .*audio-wave-widget'\"");
         }
     }
 
@@ -86,15 +87,23 @@ Item {
     function handleData(line) {
         if (!line)
             return;
-        const parts = line.split(";");
-        if (parts.length < numBars)
+        const rawParts = line.split(";");
+        const parts = [];
+        for (let i = 0; i < rawParts.length; i++) {
+            if (rawParts[i] !== "")
+                parts.push(rawParts[i]);
+        }
+        if (!parts.length)
             return;
         const prev = bars;
         const out = [];
         let isQuiet = true;
         const a = smoothing;
         for (let i = 0; i < numBars; i++) {
-            const v = parseFloat(parts[i]);
+            // Keep animating even if the feeder is briefly still on the old bar
+            // count while cava restarts after a config change.
+            const sourceIndex = Math.min(parts.length - 1, Math.floor(i * parts.length / numBars));
+            const v = parseFloat(parts[sourceIndex]);
             const target = isNaN(v) ? 0 : v;
             if (target > idleThreshold)
                 isQuiet = false;
@@ -103,7 +112,9 @@ Item {
         }
         bars = out;
 
-        if (isQuiet) {
+        if (restarting) {
+            pollTimer.interval = vis.pollInterval;
+        } else if (isQuiet) {
             if (idleCounter < plasmoid.configuration.framerate * 3) {
                 idleCounter++;
             } else {
@@ -136,10 +147,13 @@ Item {
     }
 
     function restart() {
+        vis.restarting = true;
         vis.idleCounter = 0;
+        vis.bars = Array(vis.numBars).fill(0);
         pollTimer.interval = vis.pollInterval;
         feederLauncher.killFeeder();
         restartTimer.start();
+        restartCooldown.start();
     }
 
     Timer {
@@ -149,10 +163,18 @@ Item {
         onTriggered: feederLauncher.spawn()
     }
 
+    Timer {
+        id: restartCooldown
+        interval: 1200
+        repeat: false
+        onTriggered: vis.restarting = false
+    }
+
     Connections {
         target: plasmoid.configuration
         ignoreUnknownSignals: true
         function onNumBarsChanged() {
+            vis.bars = Array(vis.numBars).fill(0);
             vis.restart();
         }
         function onSensitivityChanged() {

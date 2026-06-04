@@ -34,6 +34,7 @@ KCM.SimpleKCM {
     property alias cfg_artBg: artBgCheckBox.checked
     property alias cfg_artBgDim: artBgDimSlider.value
     property alias cfg_artBgBlur: artBgBlurSlider.value
+    property alias cfg_artBgTransparency: artBgTransparencySlider.value
     property alias cfg_showArtThumb: showArtThumbCheckBox.checked
     property alias cfg_artBgKeepThumb: artBgKeepThumbCheckBox.checked
 
@@ -276,6 +277,22 @@ KCM.SimpleKCM {
             }
             QQC.Label {
                 text: Math.round(artBgDimSlider.value * 100) + "%"
+                Layout.minimumWidth: 40
+            }
+        }
+
+        RowLayout {
+            visible: showBgCheckBox.checked
+            Kirigami.FormData.label: i18n("Transparency:")
+            QQC.Slider {
+                id: artBgTransparencySlider
+                from: 0.0
+                to: 1.0
+                stepSize: 0.02
+                Layout.fillWidth: true
+            }
+            QQC.Label {
+                text: Math.round(artBgTransparencySlider.value * 100) + "%"
                 Layout.minimumWidth: 40
             }
         }

@@ -77,6 +77,9 @@
         <entry name="artBgBlur" type="Double">
             <default>0.22</default>
         </entry>
+        <entry name="artBgTransparency" type="Double">
+            <default>1.0</default>
+        </entry>
         <entry name="showArtThumb" type="Bool">
             <default>true</default>
         </entry>

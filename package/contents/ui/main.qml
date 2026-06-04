@@ -167,12 +167,17 @@ PlasmoidItem {
             visible: plasmoid.configuration.showBg
 
             // Round the whole composited card (art + tint + border) in one pass.
-            // A Rectangle's radius + clip only clips children to the SQUARE
-            // bounding box, so the fill/blur leaked out past the rounded border —
-            // that was the "weird corners". Masking the final output with a
-            // rounded rect fixes every background mode (solid or art) at once.
             maskEnabled: true
             maskSource: cardRoundMask
+
+            // Background card transparency — art + blur fade together as one layer.
+            // Wave, text and controls remain fully opaque on top.
+            opacity: plasmoid.configuration.artBgTransparency
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: 200
+                }
+            }
         }
 
         // Rounded-rectangle alpha mask for backgroundCardEffect. Rendered to a
@@ -198,7 +203,8 @@ PlasmoidItem {
             radius: plasmoid.configuration.bgRadius
             visible: plasmoid.configuration.showBg && plasmoid.configuration.artBg && bgArtImg.status === Image.Ready
             // 0 = art fully visible · 1 = strongly dimmed for readability.
-            opacity: plasmoid.configuration.artBgDim
+            // Also inherits the background transparency so it fades with the card.
+            opacity: plasmoid.configuration.artBgDim * plasmoid.configuration.artBgTransparency
             gradient: Gradient {
                 GradientStop {
                     position: 0.0

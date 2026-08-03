@@ -67,10 +67,37 @@ sequenceDiagram
 ### 1. The Feeder (`feeder.sh`)
 The feeder script acts as a bridge. It uses `cava` to process system audio and outputs raw data. It ensures only one instance of CAVA is running by using `flock`.
 
+It also **probes input backends**. cava is compiled with a fixed set of them and distros do
+not agree on which ones, so a hardcoded `method = pipewire` silently produces nothing on a
+build without PipeWire support, or on a machine where the sound server is not reachable.
+With the input method left on `auto` the feeder tries `pipewire`, `pulse`, then `alsa`, and
+keeps the first one that emits a frame within `PROBE_TIMEOUT` seconds (cava emits frames
+continuously even in silence, so "no output at all" is a reliable failure signal). The
+winner is cached in `$RUN/input-method` so restarts skip the probe.
+
+Two extra files make failures visible instead of silent:
+
+| File | Contents |
+|---|---|
+| `$RUN/status` | `ok <method>`, `probing <method>`, or `error <code> [detail]` |
+| `$RUN/cava.log` | cava's own stderr, for when the probe fails |
+
+Error codes: `no-cava` (binary missing), `no-backend` (every candidate failed),
+`cava-exited` (a working backend died — usually transient).
+
+`no-cava` carries a third token naming the detected package manager (`apt-get`, `pacman`,
+`nix-env`, …) so the widget can print the exact install command rather than "install cava".
+Detection is by binary presence, not the `/etc/os-release` ID: derivatives keep their
+parent's package manager but change the ID.
+
 ### 2. The Data Handler (`Visualizer.qml`)
 This component is responsible for:
 - Starting the feeder script.
 - Periodically reading the bars data from the filesystem.
+- Polling `$RUN/status` every 4s and exposing `backendFailed` / `backendMessage` /
+  `backendHint`, which `main.qml` renders in place of the waveform. A `cava-exited` state
+  triggers an immediate respawn (the `flock` makes a redundant spawn a no-op) and is only
+  reported to the user if it persists for ~12s.
 - Cleaning up the feeder process when the widget is destroyed.
 
 ### 3. The Renderer (`main.qml`)

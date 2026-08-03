@@ -1,4 +1,4 @@
-.PHONY: help view view-h install pack tag
+.PHONY: help view view-h install doctor pack tag
 .DEFAULT_GOAL := help
 
 help: ## list targets
@@ -20,6 +20,9 @@ view-h: ## preview widget (horizontal)
 
 install: ## install test copy to local Plasma session
 	@./test_install.sh
+
+doctor: ## diagnose "the bars don't move" (paste output into issues)
+	@bash package/contents/code/doctor.sh
 
 pack: ## build .plasmoid archive
 	@if command -v nix >/dev/null 2>&1 && [ -f flake.nix ]; then \

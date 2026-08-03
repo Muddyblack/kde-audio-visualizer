@@ -97,6 +97,7 @@ A glassy audio visualizer plasmoid for KDE Plasma 6. Renders a mirrored waveform
 
 - KDE Plasma **6.0+**
 - [`cava`][cava] — the audio bar generator
+- A running PipeWire or PulseAudio server (the widget auto-detects which one cava can capture from)
 - `flock` (from `util-linux`) and `pkill` (from `procps`) — standard on virtually every Linux distro
 
 [cava]: https://github.com/karlstav/cava
@@ -171,6 +172,7 @@ All settings are available via the widget's right-click → Configure menu:
 | **Framerate** | Target refresh rate in Hz |
 | **Sensitivity** | Cava amplitude multiplier |
 | **Smoothing** | Noise reduction factor (0–1) |
+| **Audio Input** | Auto-detect, or pin cava to PipeWire / PulseAudio / ALSA |
 | **Wave Color** | System accent or custom color |
 | **Wave Glow** | Neon glow shadow on the waveform |
 | **Fill Wave** | Transparent gradient fill under the waveform |
@@ -180,6 +182,38 @@ All settings are available via the widget's right-click → Configure menu:
 | **Art Background** | Use the album cover as a blurred card background |
 | **Art Blur / Art Darkness** | Independent sliders to tune how blurred and how dark the art background is |
 | **Show MPRIS info** | Toggle album art, track title, artist, and controls |
+
+## Troubleshooting
+
+**The bars never move (track info and controls work fine).**
+
+The waveform comes from `cava`, which is a separate process from the MPRIS metadata — so
+playback info can be perfect while audio capture is dead. The widget tells you which it is:
+if the backend is down it prints the reason where the wave would be, with the command to fix
+it underneath (`sudo apt install cava`, `sudo pacman -S cava`, … depending on your distro).
+Hover the message for the full explanation.
+
+Run the built-in diagnostic and paste its output into an issue:
+
+```bash
+bash ~/.local/share/plasma/plasmoids/org.muddyblack.plasmaAudioVisualizer/contents/code/doctor.sh
+```
+
+It reports your cava version, which input backends your cava was *built* with (distros
+differ — a cava without PipeWire support cannot capture on a PipeWire system), whether
+PipeWire/PulseAudio are running, and a live 2-second capture test per backend.
+
+Common causes:
+
+| Symptom | Fix |
+|---|---|
+| `cava is not installed` | The widget prints the install command for your package manager underneath. It retries every 30s, so no Plasma restart is needed unless your package manager only updates `PATH` for new sessions |
+| `No usable audio input` | Check the doctor output — usually no sound server is reachable, or cava was built without the backend you need |
+| Bars only move for one app | Nothing to fix: cava captures the default sink's monitor, so it follows system output |
+| Everything works but bars are flat and quiet | Raise **Sensitivity** or lower **Smoothing** in the widget settings |
+
+The feeder keeps a log of cava's own messages at `$XDG_RUNTIME_DIR/audio-wave-widget/cava.log`
+and its current state in `.../status`.
 
 ## How it works
 

@@ -22,9 +22,15 @@ A modern, customizable audio visualizer widget for KDE Plasma 6. It renders a mi
 [b]Requirements[/b]
 To run this widget, you will need:
 [list]
-[*] [b]cava[/b] (console audio visualizer) — to generate the raw waveform bars.
+[*] [b]cava[/b] (console audio visualizer) — to generate the raw waveform bars. Install it before adding the widget.
+[*] A running [b]PipeWire[/b] or [b]PulseAudio[/b] server — the widget auto-detects which one your cava build can capture from.
 [*] [b]flock[/b] (from util-linux) and [b]pkill[/b] (from procps) — standard utilities pre-installed on virtually all Linux distributions.
 [/list]
+
+If the bars stay flat, the widget now says why right where the waveform would be. For a full report, run:
+[code]
+bash ~/.local/share/plasma/plasmoids/org.muddyblack.plasmaAudioVisualizer/contents/code/doctor.sh
+[/code]
 
 ---
 

@@ -14,6 +14,10 @@ KCM.SimpleKCM {
     property alias cfg_sensitivity: sensitivitySlider.value
     property alias cfg_framerate: framerateSpin.value
     property alias cfg_noiseReduction: noiseReductionSlider.value
+    // ComboBox.currentValue is read-only, so this one is a plain property the
+    // combo writes into (the Default pairing is what KCM resets to).
+    property string cfg_inputMethod: "auto"
+    property string cfg_inputMethodDefault: "auto"
 
     property alias cfg_showMpris: showMprisCheckBox.checked
     property alias cfg_useSystemAccent: useSystemAccentCheckBox.checked
@@ -89,6 +93,41 @@ KCM.SimpleKCM {
                 text: noiseReductionSlider.value.toFixed(2)
                 Layout.minimumWidth: 40
             }
+        }
+
+        QQC.ComboBox {
+            id: inputMethodCombo
+            Kirigami.FormData.label: i18n("Audio Input:")
+            textRole: "label"
+            valueRole: "value"
+            model: [
+                {
+                    label: i18n("Auto-detect"),
+                    value: "auto"
+                },
+                {
+                    label: i18n("PipeWire"),
+                    value: "pipewire"
+                },
+                {
+                    label: i18n("PulseAudio"),
+                    value: "pulse"
+                },
+                {
+                    label: i18n("ALSA (snd_aloop)"),
+                    value: "alsa"
+                }
+            ]
+            onActivated: root.cfg_inputMethod = currentValue
+            Component.onCompleted: currentIndex = Math.max(0, indexOfValue(root.cfg_inputMethod))
+        }
+
+        QQC.Label {
+            Layout.maximumWidth: Kirigami.Units.gridUnit * 18
+            wrapMode: Text.WordWrap
+            font: Kirigami.Theme.smallFont
+            opacity: 0.7
+            text: i18n("Auto-detect tries PipeWire, then PulseAudio, then ALSA, and keeps the first one cava can actually capture from.")
         }
 
         // Visual Settings Section

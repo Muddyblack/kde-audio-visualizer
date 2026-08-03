@@ -26,9 +26,11 @@
               root=$out/share/plasma/plasmoids/org.muddyblack.audioWaveVisualizer
               mkdir -p "$root"
               cp -r . "$root/"
-              chmod +x "$root/contents/code/feeder.sh"
-              wrapProgram "$root/contents/code/feeder.sh" \
-                --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.cava pkgs.util-linux pkgs.procps pkgs.coreutils ]}
+              for script in feeder.sh doctor.sh; do
+                chmod +x "$root/contents/code/$script"
+                wrapProgram "$root/contents/code/$script" \
+                  --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.cava pkgs.util-linux pkgs.procps pkgs.coreutils pkgs.gnused ]}
+              done
               runHook postInstall
             '';
 

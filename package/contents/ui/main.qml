@@ -1,4 +1,5 @@
 import QtQuick 2.15
+import QtQuick.Controls as QQC
 import QtQuick.Layouts 1.1
 import QtQuick.Effects
 import org.kde.plasma.plasmoid
@@ -29,6 +30,57 @@ PlasmoidItem {
     readonly property color pgEndColor: plasmoid.configuration.useSystemControls ? "#ffffff" : controlColor
 
     readonly property string desktopEntry: mpris2Model.currentPlayer?.desktopEntry ?? ""
+
+    // Well-behaved sources (Spotify, a normal youtube.com tab, tagged local
+    // files) publish xesam:title and never reach any of this. What follows is
+    // only for the ones that publish nothing: a browser tab pointed straight at a
+    // CDN link, mpv on a `yt-dlp -g` URL, a proxy that strips the page. Plasma
+    // then falls back to the URL cut at its last slash, and since googlevideo
+    // links carry an unencoded "mime=video/mp4" that reaches us as a 300-char
+    // query fragment ("mp4&rqh=1&gir=yes&clen=…").
+    readonly property string displayTrack: _prettifyTrack(track)
+    readonly property bool trackUnknown: hasPlayer && displayTrack === ""
+    readonly property string sourceHint: trackUnknown ? _sourceHint(track) : ""
+
+    // A name worth putting on the card, or "" when there is none. Never invents
+    // a title — an unusable value becomes the "no metadata" state instead.
+    function _prettifyTrack(raw) {
+        const s = (raw || "").trim();
+        if (s === "")
+            return "";
+
+        const urlParts = s.match(/^[a-z][a-z0-9+.-]*:\/\/([^/?#]*)([^?#]*)/i);
+        const isPath = !urlParts && s.startsWith("/");
+        // Leftover key=value&key=value soup. Real titles don't look like this.
+        const isDebris = s.indexOf("&") !== -1 && (s.match(/[a-z0-9_]+=[^&]*/gi) || []).length >= 3;
+        if (!urlParts && !isPath && !isDebris)
+            return s;
+        if (isDebris && !urlParts)
+            return "";
+
+        let name = urlParts ? urlParts[2] : s.split("?")[0];
+        try {
+            name = decodeURIComponent(name);
+        } catch (e) {
+            // malformed %-escape: keep the raw form
+        }
+        name = (name.split("/").filter(part => part !== "").pop() || "").replace(/\.[a-z0-9]{1,5}$/i, "").replace(/[_+]+/g, " ").trim();
+        // A filename carries information; a generic stream endpoint does not.
+        return /^(videoplayback|playback|stream|index|master|manifest|playlist)$/i.test(name) ? "" : name;
+    }
+
+    // Shown under "No track metadata" so the card still says where the sound is
+    // coming from.
+    function _sourceHint(raw) {
+        const s = (raw || "").trim();
+        const host = (s.match(/^[a-z][a-z0-9+.-]*:\/\/([^/?#]*)/i) || ["", ""])[1].toLowerCase();
+        // googlevideo params survive even when the host got chopped off
+        if (host.endsWith("googlevideo.com") || /(^|&)(itag|clen|gir|lmt|fvip|ratebypass|sparams)=/i.test(s))
+            return "Direct YouTube stream";
+        if (host !== "")
+            return host.replace(/^www\./, "");
+        return "Player published no title";
+    }
 
     property string artUrl: ""
 
@@ -569,8 +621,50 @@ PlasmoidItem {
                     antialiasing: true
                     renderStrategy: Canvas.Cooperative
 
+                    // Backend down: say what broke and what to type, instead of
+                    // drawing a flat line that looks exactly like silence.
+                    Column {
+                        anchors.centerIn: parent
+                        width: parent.width
+                        spacing: 0
+                        visible: vis.backendFailed
+
+                        Text {
+                            width: parent.width
+                            horizontalAlignment: Text.AlignHCenter
+                            elide: Text.ElideRight
+                            font.pixelSize: 10
+                            color: root.textColor
+                            opacity: 0.8
+                            text: vis.backendMessage
+                        }
+
+                        Text {
+                            width: parent.width
+                            horizontalAlignment: Text.AlignHCenter
+                            elide: Text.ElideMiddle
+                            // Monospace only when the line is literally a
+                            // command to type.
+                            font.family: vis.backendCode === "no-cava" ? "monospace" : Kirigami.Theme.defaultFont.family
+                            font.pixelSize: 9
+                            color: root.textColor
+                            opacity: 0.55
+                            text: vis.backendAction
+                            visible: text !== ""
+                        }
+
+                        QQC.ToolTip.visible: hoverHandler.hovered
+                        QQC.ToolTip.text: vis.backendMessage + "\n" + vis.backendHint
+                        HoverHandler {
+                            id: hoverHandler
+                        }
+                    }
+
                     Connections {
                         target: vis
+                        function onBackendFailedChanged() {
+                            wave.requestPaint();
+                        }
                         function onBarsChanged() {
                             wave.requestPaint();
                         }
@@ -610,6 +704,12 @@ PlasmoidItem {
                         const mid = height / 2;
                         const n = vis.numBars;
                         const vtype = plasmoid.configuration.visualizerType;
+
+                        // Backend down: the label above carries the explanation,
+                        // so leave the canvas empty instead of striping the text
+                        // with the idle line.
+                        if (vis.backendFailed)
+                            return;
 
                         // ── Idle line (all visualizer types) ──────────────────
                         if (!root.isPlaying) {
@@ -1371,20 +1471,31 @@ PlasmoidItem {
                 Text {
                     Layout.fillWidth: true
                     Layout.preferredHeight: implicitHeight
-                    text: root.track
+                    text: root.trackUnknown ? "No track metadata" : root.displayTrack
                     color: root.textColor
+                    opacity: root.trackUnknown ? 0.75 : 1
                     font.bold: true
+                    font.italic: root.trackUnknown
                     font.pixelSize: 11
                     elide: Text.ElideRight
+
+                    // The raw value is the only clue when someone reports "it
+                    // shows nothing" — one hover away beats putting it on the card.
+                    HoverHandler {
+                        id: rawTrackHover
+                    }
+                    QQC.ToolTip.visible: rawTrackHover.hovered && root.trackUnknown && root.track !== ""
+                    QQC.ToolTip.text: root.track.length > 160 ? root.track.substring(0, 160) + "…" : root.track
                 }
 
                 Text {
                     Layout.fillWidth: true
                     Layout.preferredHeight: implicitHeight
-                    text: root.artist
+                    text: root.artist !== "" ? root.artist : root.sourceHint
                     color: root.textColor
                     opacity: 0.6
                     font.pixelSize: 9
+                    font.italic: root.artist === "" && root.sourceHint !== ""
                     elide: Text.ElideRight
                 }
             }

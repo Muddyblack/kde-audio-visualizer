@@ -27,7 +27,7 @@ Item {
             disconnectSource(source);
         }
         function spawn() {
-            const args = [plasmoid.configuration.numBars, plasmoid.configuration.framerate, plasmoid.configuration.sensitivity, plasmoid.configuration.noiseReduction].join(" ");
+            const args = [plasmoid.configuration.numBars, plasmoid.configuration.framerate, plasmoid.configuration.sensitivity, plasmoid.configuration.noiseReduction, plasmoid.configuration.inputMethod || "auto"].join(" ");
             connectSource("bash " + vis.feederPath + " " + args);
         }
         function killFeeder() {
@@ -36,7 +36,9 @@ Item {
     }
 
     // Resolved at startup by pathResolver — no shell expansion needed after that.
-    property string resolvedBarsPath: ""
+    property string resolvedRunDir: ""
+    readonly property string resolvedBarsPath: resolvedRunDir ? resolvedRunDir + "/bars" : ""
+    readonly property string resolvedStatusPath: resolvedRunDir ? resolvedRunDir + "/status" : ""
 
     Plasma5Support.DataSource {
         id: pathResolver
@@ -46,14 +48,131 @@ Item {
             disconnectSource(source);
             const p = (data["stdout"] || "").trim();
             if (p)
-                vis.resolvedBarsPath = p;
+                vis.resolvedRunDir = p;
         }
     }
 
     Component.onCompleted: {
         // Resolve $XDG_RUNTIME_DIR once at startup so we can use the absolute path
         // without spawning a shell to expand variables on every frame.
-        pathResolver.connectSource("echo -n ${XDG_RUNTIME_DIR:-/tmp}/audio-wave-widget/bars");
+        pathResolver.connectSource("echo -n ${XDG_RUNTIME_DIR:-/tmp}/audio-wave-widget");
+    }
+
+    // ── Backend health ────────────────────────────────────────────────────────
+    // feeder.sh writes a one-line status file: "ok <method>", "probing <method>"
+    // or "error <code> [detail]". Without it a broken cava is indistinguishable
+    // from silence — the widget just draws a flat line forever, which is exactly
+    // what users report as "the bars don't work".
+    property string backendState: ""   // "" (unknown) | "ok" | "probing" | "error"
+    property string backendCode: ""    // no-cava | no-backend | cava-exited
+    property string backendDetail: ""
+    property int backendErrorStreak: 0
+
+    // cava exiting is usually transient (sound server restart, sink switch) and
+    // the respawn below fixes it within seconds, so only complain once it has
+    // clearly stuck. A missing cava or no usable backend is reported right away.
+    readonly property bool backendFailed: backendState === "error" && (backendCode !== "cava-exited" || backendErrorStreak >= 3)
+
+    readonly property string backendMessage: {
+        if (!backendFailed)
+            return "";
+        if (backendCode === "no-cava")
+            return "cava is not installed";
+        if (backendCode === "no-backend")
+            return "No usable audio input (tried " + backendDetail.replace(/,/g, ", ") + ")";
+        return "Audio capture stopped";
+    }
+
+    // The install command for whatever package manager feeder.sh found. Naming
+    // the command is the whole point — "cava is not installed" on its own is
+    // what sends people to the issue tracker.
+    readonly property string installCommand: {
+        switch (backendDetail) {
+        case "apt-get":
+            return "sudo apt install cava";
+        case "dnf":
+            return "sudo dnf install cava";
+        case "pacman":
+            return "sudo pacman -S cava";
+        case "zypper":
+            return "sudo zypper install cava";
+        case "apk":
+            return "sudo apk add cava";
+        case "xbps-install":
+            return "sudo xbps-install cava";
+        case "emerge":
+            return "sudo emerge media-sound/cava";
+        case "nix-env":
+            return "add pkgs.cava to your configuration";
+        default:
+            return "install the 'cava' package";
+        }
+    }
+
+    // Second line under the headline: short enough for a 44px tall waveform.
+    readonly property string backendAction: {
+        if (!backendFailed)
+            return "";
+        if (backendCode === "no-cava")
+            return installCommand;
+        if (backendCode === "no-backend")
+            return "is PipeWire or PulseAudio running?";
+        return "see " + vis.resolvedRunDir + "/cava.log";
+    }
+
+    readonly property string backendHint: {
+        if (!backendFailed)
+            return "";
+        if (backendCode === "no-cava")
+            return installCommand + "\nThe widget picks it up within 30 seconds — no restart needed, unless your package manager only changes PATH for new sessions.";
+        if (backendCode === "no-backend")
+            return "cava could not capture from any backend. Check that PipeWire or PulseAudio is running, or pin one under Audio Input in the widget settings.";
+        return "cava keeps exiting — see " + vis.resolvedRunDir + "/cava.log";
+    }
+
+    Plasma5Support.DataSource {
+        id: statusReader
+        engine: "executable"
+        connectedSources: []
+        onNewData: function (source, data) {
+            disconnectSource(source);
+            vis.handleStatus((data["stdout"] || "").trim());
+        }
+        function read() {
+            if (vis.resolvedStatusPath)
+                connectSource("cat " + vis.resolvedStatusPath);
+        }
+    }
+
+    function handleStatus(line) {
+        // No status file at all (feeder never ran, or an older one is still
+        // holding the lock): stay quiet rather than guess.
+        if (!line)
+            return;
+        const parts = line.split(" ");
+        backendState = parts[0] || "";
+        backendCode = parts[1] || "";
+        backendDetail = parts[2] || "";
+        if (backendState === "error") {
+            backendErrorStreak++;
+            // A backend that worked and died usually comes straight back, so
+            // nudge the feeder instead of waiting out the 30s heartbeat. The
+            // flock in feeder.sh makes this a no-op if it is already healthy.
+            // Hard failures (no cava, no backend at all) are left to the
+            // heartbeat — respawning every 4s would never fix them.
+            if (backendCode === "cava-exited")
+                feederLauncher.spawn();
+        } else {
+            backendErrorStreak = 0;
+        }
+    }
+
+    Timer {
+        interval: 4000
+        running: vis.plasmoidVisible && vis.resolvedStatusPath !== ""
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: statusReader.read()
     }
 
     // Reader uses pre-resolved path (no shell expansion per frame).
@@ -149,6 +268,7 @@ Item {
     function restart() {
         vis.restarting = true;
         vis.idleCounter = 0;
+        vis.backendErrorStreak = 0;
         vis.bars = Array(vis.numBars).fill(0);
         pollTimer.interval = vis.pollInterval;
         feederLauncher.killFeeder();
@@ -184,6 +304,9 @@ Item {
             vis.restart();
         }
         function onNoiseReductionChanged() {
+            vis.restart();
+        }
+        function onInputMethodChanged() {
             vis.restart();
         }
     }

@@ -23,6 +23,9 @@
         <entry name="noiseReduction" type="Double">
             <default>0.77</default>
         </entry>
+        <entry name="inputMethod" type="String">
+            <default>auto</default>
+        </entry>
         <entry name="showMpris" type="Bool">
             <default>true</default>
         </entry>

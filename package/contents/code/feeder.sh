@@ -121,7 +121,12 @@ run_method() {
 
   cava -p "$CONF" 2>>"$LOG" | while IFS= read -r line; do
     [ -n "$line" ] || continue
-    printf '%s' "$line" >"$RUN/bars.tmp" && mv -f "$RUN/bars.tmp" "$RUN/bars"
+    # Direct write, no tmp+rename: at framerate this forked an external mv
+    # process per frame (up to 4M/day at 60fps). A poll landing in the
+    # microsecond truncate/write gap sees an empty file; Visualizer.qml's
+    # handleData() already no-ops on an empty read, so that poll just keeps
+    # the previous frame instead of updating.
+    printf '%s' "$line" >"$RUN/bars"
     if [ ! -e "$MARKER" ]; then
       : >"$MARKER"
       printf '%s\n' "$method" >"$REMEMBERED"

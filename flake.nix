@@ -12,7 +12,7 @@
         let pkgs = import nixpkgs { inherit system; };
         in {
           default = pkgs.stdenvNoCC.mkDerivation {
-            pname = "plasma-audio-wave-widget";
+            pname = "plasma-audio-visualizer";
             version = metadata.KPlugin.Version;
             src = ./package;
 
@@ -23,7 +23,7 @@
 
             installPhase = ''
               runHook preInstall
-              root=$out/share/plasma/plasmoids/org.muddyblack.audioWaveVisualizer
+              root=$out/share/plasma/plasmoids/${metadata.KPlugin.Id}
               mkdir -p "$root"
               cp -r . "$root/"
               for script in feeder.sh doctor.sh; do
@@ -38,7 +38,7 @@
               description = "Plasma 6 audio visualizer widget (cava-backed)";
               license = licenses.mit;
               platforms = platforms.linux;
-              homepage = "https://github.com/muddyblack/plasma-audio-wave-widget";
+              homepage = "https://github.com/muddyblack/kde-audio-visualizer";
             };
           };
         });

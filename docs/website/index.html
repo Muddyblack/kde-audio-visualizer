@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Plasma Audio Visualizer — Looks &amp; Studio</title>
+<meta name="description" content="Explore audio visualizer presets and tune your look in the interactive studio for Plasma Audio Visualizer.">
+<link rel="icon" type="image/png" href="assets/studio/icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="assets/studio/wallpapers.css">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><filter id="lgRefract" x="0" y="0" width="100%" height="100%" color-interpolation-filters="sRGB"><feTurbulence type="fractalNoise" baseFrequency="0.006 0.011" numOctaves="2" seed="4" result="n"/><feGaussianBlur in="n" stdDeviation="2.5" result="nb"/><feDisplacementMap id="lgMap" in="SourceGraphic" in2="nb" scale="36" xChannelSelector="R" yChannelSelector="G"/></filter></svg>
+<header><div class="hwrap">
+  <div class="brand"><img class="brand-icon" src="assets/studio/icon.png" width="36" height="36" alt="">Plasma Audio Visualizer</div>
+  <nav class="jump" aria-label="Main navigation">
+    <a href="#" data-page="looks" aria-current="page">Looks</a>
+    <a href="#" data-page="studio">Studio</a>
+    <a href="https://github.com/Muddyblack/kde-audio-visualizer" target="_blank" rel="noopener">GitHub</a>
+    <a href="https://www.opendesktop.org/p/2359422" target="_blank" rel="noopener">KDE Store</a>
+  </nav>
+</div></header>
+
+<main>
+<div data-page="looks">
+<section class="hero">
+  <div class="hero-bg bd bd-sea"></div>
+  <div class="hero-glow"></div>
+  <div class="hero-grid">
+    <div class="hero-copy">
+      <div class="eyebrow">Audio widget for Plasma &amp; Hyprland</div>
+      <h1>Music in view.<br><span>Make it yours.</span></h1>
+      <p>Explore visualizers, layouts and colours for KDE Plasma 6 and Hyprland. Choose a preset below, audition with live playback, or fine-tune every detail in the studio.</p>
+      <div class="hero-cta">
+        <a class="primary-link" href="#looks">Start from a look</a>
+        <a class="ghost-link" href="#" data-page="studio">Open the studio →</a>
+        <a class="ghost-link" href="https://github.com/Muddyblack/kde-audio-visualizer" target="_blank" rel="noopener">GitHub</a>
+      </div>
+      <div class="stats" id="stats"></div>
+    </div>
+    <div class="hero-showcase">
+      <div class="hero-card">
+        <span class="hero-badge"><i></i>Live preview</span>
+        <div class="bd bd-sea"></div>
+        <div class="fit" id="heroFit"><div class="fi" id="heroFi"></div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="sh" id="looks"><div><div class="eyebrow">01 · Start from a look</div><h2>Presets</h2></div><p>One click sets the whole studio below. Buttons on the cards work — they share one sample player.</p></div>
+<div class="filters" id="filters"></div>
+<section class="presets" id="presets" aria-label="Preset looks"></section>
+</div>
+
+<div data-page="studio" hidden>
+<div class="sh" id="studio"><div><div class="eyebrow">02 · Tune every detail</div><h2>Settings that preview as you go</h2></div><p>Tabs, search, visual pickers, and the widget always in view — on a desktop, a Plasma panel, or a Hyprland bar.</p></div>
+<section class="studio">
+  <div class="panel" id="panel">
+    <div class="phead">
+      <label class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="search" type="search" placeholder="Search settings…" aria-label="Search settings"><kbd>/</kbd></label>
+      <button class="ghost" id="shuffle" title="Random combination">Surprise me</button>
+    </div>
+    <div class="tabs" role="tablist" id="tabs"></div>
+    <div class="pbody" id="pbody"></div>
+  </div>
+
+  <div class="stagecol">
+    <div class="stage" id="stage">
+      <div class="bd bd-dusk" id="stageBd"></div>
+      <div class="bar top">
+        <div class="chip" id="bdPicker"><span class="lbl">Wallpaper</span></div>
+        <div class="chip"><span class="lbl">State</span><select id="statusSel" aria-label="Widget state">
+          <option value="normal">Playing</option><option value="paused">Paused</option><option value="long">Long title</option><option value="nometa">No metadata</option><option value="idle">Nothing playing</option><option value="backend">cava missing</option>
+        </select></div>
+      </div>
+      <div class="hint" id="hint" hidden></div>
+      <div class="scaler" id="scaler"><div class="scaled" id="mainWidget"></div></div>
+      <div class="lightbox" id="lightbox" hidden></div>
+      <div class="bar bottom">
+        <div class="chip" id="accentPicker"><span class="lbl">Accent</span></div>
+        <span class="sizeinfo" id="sizeInfo"></span>
+        <div class="chip" id="zoomPicker"><button data-z="1">1×</button><button data-z="2">2×</button><button data-z="fit" aria-pressed="true">Fit</button></div>
+      </div>
+    </div>
+    <div class="caption">
+      <div class="ct"><h3 id="cfgTitle">Changed settings</h3><div class="btnrow"><button class="ghost" id="resetAll">Reset to defaults</button><button class="primary" id="copyCfg">Copy config</button></div></div>
+      <div class="cfg" id="cfg"></div>
+      <div class="legend"><span><span class="kv" style="padding:1px 6px">key</span> existing main.xml</span><span><span class="kv isnew" style="padding:1px 6px"><b>key</b></span> proposed</span><span><span class="kv ishypr" style="padding:1px 6px"><b>key</b></span> Hyprland shell</span></div>
+    </div>
+  </div>
+</section>
+</div>
+
+</main>
+<footer>
+  <span>Plasma Audio Visualizer · <a href="https://github.com/Muddyblack/kde-audio-visualizer" target="_blank" rel="noopener">GitHub</a> · <a href="https://www.opendesktop.org/p/2359422" target="_blank" rel="noopener">OpenDesktop (KDE Store)</a></span>
+  <span>Interactive browser preview — no desktop settings are changed</span>
+</footer>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="assets/studio/StudioCatalog.js"></script>
+<script src="assets/studio/PresetCodec.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

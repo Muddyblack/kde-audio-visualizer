@@ -109,7 +109,7 @@ TestCase {
 
     function test_appearanceChanges_data() {
         const rows = [];
-        for (let style = 0; style < 6; style++)
+        for (let style = 0; style < 16; style++)
             rows.push({
                 tag: "style-" + style,
                 style: style
@@ -149,5 +149,41 @@ TestCase {
         tryVerify(() => freshPaints.count > 0);
         const expected = grabImage(fresh);
         verify(changed.equals(expected), "Appearance changes must discard stale cached paint state");
+    }
+
+    function test_legacyIgnoresUnusedMotionInputs() {
+        subject.hasAudio = true;
+        rendered();
+        wait(50);
+        paints.clear();
+        // The shared audio frame updates these inputs for every renderer. A
+        // Classic solid waveform must keep its cached paint and gradients.
+        subject.visualFrameTime = 3000;
+        subject.bass = .7;
+        subject.mid = .8;
+        subject.high = .9;
+        subject.energy = .5;
+        wait(80);
+        compare(paints.count, 0, "Unused analysis and time must not repaint Classic");
+    }
+
+    function test_reducedMotionIgnoresTime_data() {
+        return test_appearanceChanges_data();
+    }
+
+    function test_reducedMotionIgnoresTime(row) {
+        subject.hasAudio = true;
+        subject.visualizerType = row.style;
+        subject.reducedMotion = true;
+        // Exercise both decorative geometry and time-dependent colour modes.
+        subject.vizColorMode = "rainbow";
+        subject.hueReactive = true;
+        rendered();
+        wait(50);
+        paints.clear();
+        for (let i = 1; i < 20; i++)
+            subject.visualFrameTime = i * 50;
+        wait(80);
+        compare(paints.count, 0, "Reduced motion must freeze decorative time without repainting");
     }
 }

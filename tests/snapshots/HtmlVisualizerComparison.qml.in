@@ -1,0 +1,118 @@
+import QtQuick
+import QtTest
+import @UI@ as Widget
+import "Reference.js" as Reference
+
+TestCase {
+    id: testCase
+    name: "HtmlVisualizerComparison"
+    when: windowShown
+    visible: true
+    width: 1000
+    height: 100
+    property string output: @OUTPUT@
+
+    Component {
+        id: frameComponent
+        Rectangle { color: "#20232b" }
+    }
+    Component { id: canvasComponent; Widget.WaveCanvas {} }
+    Component { id: shaderComponent; Widget.WaveShader {} }
+    Component {
+        id: referenceComponent
+        Canvas {
+            id: referenceCanvas
+            property var row
+            onPaint: Reference.render(this, row)
+            transform: Scale {
+                origin.y: referenceCanvas.height / 2
+                yScale: referenceCanvas.row && referenceCanvas.row.settings.vizDirection === "down"
+                    && [6,7,8].includes(referenceCanvas.row.style) ? -1 : 1
+            }
+        }
+    }
+    Component { id: browserImageComponent; Image { smooth: false } }
+    Component {
+        id: differenceComponent
+        Canvas {
+            property var actual
+            property var expected
+            onPaint: {
+                const ctx = getContext("2d");
+                for (let y = 0; y < height; y++) {
+                    for (let x = 0; x < width; x++) {
+                        const a = actual.pixel(x,y), b = expected.pixel(x,y);
+                        ctx.fillStyle = Qt.rgba(Math.abs(a.r-b.r),Math.abs(a.g-b.g),Math.abs(a.b-b.b),1);
+                        ctx.fillRect(x,y,1,1);
+                    }
+                }
+            }
+        }
+    }
+
+    function initTestCase() {
+        if (@BACKEND@ !== "software")
+            verify(GraphicsInfo.api !== GraphicsInfo.Software, "Requested GPU backend fell back to software; GPU comparison is not valid");
+    }
+
+    function test_visualizers_data() { return @FIXTURES@; }
+
+    function test_visualizers(row) {
+        const first = createTemporaryObject(frameComponent, testCase, {width:row.width,height:row.height});
+        const second = createTemporaryObject(frameComponent, testCase, {x:340,width:row.width,height:row.height});
+        const properties = {
+            width:row.width, height:row.height, bars:row.samples, numBars:row.samples.length,
+            maxRange:1000, hasAudio:true, backendFailed:false, waveColor:"#b4befe",
+            visualizerType:row.style, lineWidth:row.settings.lineWidth, fillWave:row.settings.fillWave,
+            glowWave:row.settings.glowWave, visualFrameTime:row.time*1000,
+            bass:row.bass, mid:row.mid, high:row.high, energy:1,
+            reducedMotion:row.settings.reducedMotion, vizDirection:row.settings.vizDirection,
+            vizColorMode:row.settings.vizColorMode, vizPalette:row.settings.vizPalette,
+            hueReactive:row.settings.hueReactive, bloom:row.settings.bloom,
+            ribbonCurvature:row.settings.ribbonCurvature, ribbonFullness:row.settings.ribbonFullness,
+            coverColor1:"#5ef2c1", coverColor2:"#b57bff",
+            peaks:row.peaks, particles:row.particles, ripples:row.ripples
+        };
+        const subject = createTemporaryObject(@RENDERER@ === "canvas" ? canvasComponent : shaderComponent, first, properties);
+        verify(subject !== null);
+        let reference;
+        if (@REFERENCE@ === "qt") {
+            reference = createTemporaryObject(referenceComponent, second, {width:row.width,height:row.height,row:row});
+            verify(reference !== null);
+            tryCompare(reference,"available",true);
+            reference.requestPaint();
+        } else {
+            reference = createTemporaryObject(browserImageComponent, second,
+                {width:row.width,height:row.height,source:"file://"+output+"/"+row.tag+"-browser.png"});
+            verify(reference !== null);
+            tryCompare(reference,"status",Image.Ready);
+        }
+        wait(150);
+        const actual = grabImage(first), expected = grabImage(second);
+        actual.save(output+"/"+row.tag+"-qml.png");
+        expected.save(output+"/"+row.tag+"-reference.png");
+        let sum=0, maximum=0, changed=0, ink=0;
+        for(let y=0;y<row.height;y++) {
+            for(let x=0;x<row.width;x++) {
+                const a=actual.pixel(x,y), b=expected.pixel(x,y);
+                const dr=Math.abs(a.r-b.r), dg=Math.abs(a.g-b.g), db=Math.abs(a.b-b.b);
+                sum += dr*dr+dg*dg+db*db;
+                maximum=Math.max(maximum,dr,dg,db);
+                if(dr+dg+db>0) changed++;
+                if(Math.abs(b.r-32/255)+Math.abs(b.g-35/255)+Math.abs(b.b-43/255)>.025) ink++;
+            }
+        }
+        const rmse=Math.sqrt(sum/(row.width*row.height*3));
+        const measurement={tag:row.tag,rmse:rmse,maxChannelError:maximum,changedPixels:changed,
+            pixelCount:row.width*row.height,exact:actual.equals(expected),referenceInkPixels:ink};
+        console.log("HTML_METRIC "+JSON.stringify(measurement));
+        verify(ink>5,"Reference must contain visible drawing");
+        const difference=createTemporaryObject(differenceComponent,testCase,
+            {x:680,width:row.width,height:row.height,actual:actual,expected:expected});
+        tryCompare(difference,"available",true);
+        difference.requestPaint(); wait(50);
+        grabImage(difference).save(output+"/"+row.tag+"-difference.png");
+        if(@MAX_RMSE@ !== null)
+            verify(rmse<=@MAX_RMSE@,row.tag+" normalized RGB RMSE "+rmse+" exceeds "+@MAX_RMSE@);
+    }
+}

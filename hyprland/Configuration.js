@@ -6,7 +6,10 @@ function defaults(xml) {
     while ((entry = entries.exec(xml)) !== null) {
         const type = entry[2];
         const value = entry[3];
-        result[entry[1]] = type === "Bool" ? value === "true" : type === "Int" || type === "Double" ? Number(value) : value;
+        result[entry[1]] = type === "Bool" ? value === "true"
+            : type === "Int" || type === "Double" ? Number(value)
+            : type === "StringList" ? (value ? value.split(",") : [])
+            : value;
     }
     return result;
 }
@@ -21,7 +24,14 @@ function parsePreferences(text) {
 function overrides(baseline, draft) {
     const result = {};
     for (const key of Object.keys(draft)) {
-        if (draft[key] !== baseline[key])
+        const value = draft[key];
+        const original = baseline[key];
+        // A saved StringList is a new array after JSON reload. Compare its
+        // contents so an unchanged list keeps following declarative defaults.
+        const sameList = Array.isArray(value) && Array.isArray(original)
+            && value.length === original.length
+            && value.every((item, index) => item === original[index]);
+        if (value !== original && !sameList)
             result[key] = draft[key];
     }
     return result;

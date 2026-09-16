@@ -1,0 +1,168 @@
+import QtQuick
+import QtTest
+import @BASELINE_UI@ as Baseline
+import @CURRENT_UI@ as Current
+import @CONFIGURATION_JS@ as Configuration
+
+// Instantiated by compare_view_snapshots.py, which supplies both implementations.
+TestCase {
+    id: testCase
+    name: "VisualizerViewSnapshots"
+    when: windowShown
+    visible: true
+    width: 1060
+    height: 210
+    property var defaults
+    readonly property string output: @OUTPUT@
+    readonly property string artwork: @ARTWORK@
+
+    function initTestCase() {
+        const request = new XMLHttpRequest();
+        request.open("GET", @DEFAULTS_XML@, false);
+        request.send();
+        defaults = Configuration.defaults(request.responseText);
+        verify(defaults.showMpris);
+        if (@BACKEND@ === "opengl")
+            verify(GraphicsInfo.api !== GraphicsInfo.Software, "An OpenGL comparison must render its effects");
+    }
+
+    Component {
+        id: frameComponent
+        Rectangle {
+            width: 520
+            height: 210
+            color: "#20232b"
+        }
+    }
+    Component {
+        id: playerComponent
+        QtObject {
+            property string artist: "Fixture Artist"
+            property string track: "Fixture Track"
+            property string artUrl: ""
+            property string desktopEntry: ""
+            property real length: 180
+            property real position: 60
+            property bool canSeek: true
+            property bool positionSupported: true
+        }
+    }
+    Component {
+        id: backendComponent
+        QtObject {
+            property var bars: [120, 380, 620, 540, 300, 820, 910, 700, 450, 260, 180, 520, 760, 640, 400, 350, 580, 830, 690, 420, 240, 160, 300, 90]
+            property real frameTimeMs: 813
+            property int numBars: 24
+            property real maxRange: 1000
+            property bool hasAudio: true
+            property bool backendFailed: false
+            property bool plasmoidVisible: true
+            property string backendCode: ""
+            property string backendMessage: ""
+            property string backendAction: ""
+            property string backendHint: ""
+        }
+    }
+    Component {
+        id: fallbackComponent
+        Rectangle {
+            radius: width / 5
+            color: "#cdd6f4"
+            Rectangle {
+                anchors.centerIn: parent
+                width: parent.width / 3
+                height: width
+                radius: width / 2
+                color: "#20232b"
+            }
+        }
+    }
+    Component {
+        id: baselineComponent
+        Baseline.VisualizerView {}
+    }
+    Component {
+        id: currentComponent
+        Current.VisualizerView {}
+    }
+
+    function test_snapshots_data() {
+        const rows = [
+            { tag: "classic-default" },
+            { tag: "classic-paused", playing: false },
+            { tag: "classic-small", width: 280, height: 90 },
+            { tag: "classic-large", width: 480, height: 160 },
+            { tag: "compact", config: { showMpris: false }, width: 200, height: 84 },
+            { tag: "compact-background", config: { showMpris: false, showBg: true }, width: 200, height: 84 },
+            { tag: "compact-small", config: { showMpris: false }, width: 160, height: 64 },
+            { tag: "compact-large", config: { showMpris: false }, width: 300, height: 130 },
+            { tag: "artwork", player: { artUrl: artwork } },
+            { tag: "art-background", player: { artUrl: artwork }, config: { showBg: true, artBg: true } },
+            { tag: "art-background-thumbnail", player: { artUrl: artwork }, config: { showBg: true, artBg: true, artBgKeepThumb: true } },
+            { tag: "art-background-transparent", player: { artUrl: artwork }, config: { showBg: true, artBg: true, artBgDim: 0.8, artBgTransparency: 0.65 } },
+            { tag: "art-background-no-cover", config: { showBg: true, artBg: true } },
+            { tag: "thumbnail-hidden", config: { showArtThumb: false } },
+            { tag: "desktop-icon", player: { desktopEntry: "fixture-player" } },
+            { tag: "long-metadata", player: { track: "A very long track title that should elide cleanly at the edge of the card", artist: "An artist name that is also longer than its available space" } },
+            { tag: "no-metadata", player: { track: "", artist: "" } },
+            { tag: "direct-stream", player: { track: "https://example.com/videoplayback?stream=1", artist: "" } },
+            { tag: "idle-visible", noPlayer: true, config: { alwaysVisible: true } },
+            { tag: "idle-background", noPlayer: true, config: { alwaysVisible: true, showBg: true } },
+            { tag: "idle-hidden", noPlayer: true, config: { alwaysVisible: false } },
+            { tag: "unknown-duration", player: { length: 0, position: 0 } },
+            { tag: "start-of-track", player: { position: 0 } },
+            { tag: "end-of-track", player: { position: 180 } },
+            { tag: "silence", backend: { hasAudio: false } },
+            { tag: "missing-cava", backend: { hasAudio: false, backendFailed: true, backendCode: "no-cava", backendMessage: "cava is missing", backendAction: "Install cava", backendHint: "Fixture diagnostic" } },
+            { tag: "custom-colors", config: { showBg: true, bgColor: "#364154", bgRadius: 24, useSystemAccent: false, customColor: "#ffb86c", useSystemText: false, customTextColor: "#f1fa8c", useSystemControls: false, customControlColor: "#8be9fd", useSystemDockBg: false, customDockBgColor: "#44475a" } }
+        ];
+        for (let style = 0; style < 5; style++) {
+            rows.push({ tag: "progress-" + style + "-playing", config: { progressBarStyle: style, showBg: true } });
+            rows.push({ tag: "progress-" + style + "-paused", config: { progressBarStyle: style, showBg: true }, playing: false });
+        }
+        for (let style = 0; style < 6; style++)
+            rows.push({ tag: "visualizer-" + style, config: { visualizerType: style } });
+        return rows;
+    }
+
+    function test_snapshots(row) {
+        const backend = createTemporaryObject(backendComponent, this, row.backend || {});
+        const player = row.noPlayer ? null : createTemporaryObject(playerComponent, this, row.player || {});
+        const configuration = Object.assign({}, defaults, row.config || {});
+        const properties = {
+            x: 20,
+            y: 20,
+            width: row.width || 360,
+            height: row.height || 104,
+            configuration: configuration,
+            visualizer: backend,
+            player: player,
+            isPlaying: row.playing !== false,
+            defaultFontFamily: "sans-serif",
+            fallbackIcon: fallbackComponent,
+            positionUnitsPerSecond: 1
+        };
+        const beforeFrame = createTemporaryObject(frameComponent, this);
+        const afterFrame = createTemporaryObject(frameComponent, this, { x: 530 });
+        const before = createTemporaryObject(baselineComponent, beforeFrame, properties);
+        const after = createTemporaryObject(currentComponent, afterFrame, properties);
+        verify(before !== null && after !== null);
+        // Freeze only the clock's prediction. The public playing state and fixed
+        // audio timestamp still exercise pause icons, progress sweeps and glow.
+        for (const view of [before, after]) {
+            const clock = findChild(view, "positionClock");
+            verify(clock !== null);
+            clock.playing = false;
+            clock.setPosition(player ? player.position : 0);
+        }
+        compare(after.implicitWidth, before.implicitWidth);
+        compare(after.implicitHeight, before.implicitHeight);
+        // Image loading, one-shot fades and Canvas painting settle on later frames.
+        wait(550);
+        const expected = grabImage(beforeFrame);
+        const actual = grabImage(afterFrame);
+        expected.save(output + "/" + row.tag + "-before.png");
+        actual.save(output + "/" + row.tag + "-after.png");
+        verify(actual.equals(expected), row.tag + " differs; see " + output);
+    }
+}

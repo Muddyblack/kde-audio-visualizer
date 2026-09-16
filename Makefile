@@ -1,5 +1,11 @@
-.PHONY: help view view-h view-hyprland settings-hyprland install doctor pack tag shaders
+.PHONY: help view view-h view-hyprland settings-hyprland install doctor pack tag shaders docs gallery
 .DEFAULT_GOAL := help
+
+gallery: ## capture tightly framed real QML screenshots at 2x resolution
+	@python3 tools/capture_gallery.py $(GALLERY_FLAGS)
+
+docs: ## build shared assets for the HTML demo; then open docs/website/index.html
+	@python3 tools/sync_studio_assets.py
 
 help: ## list targets
 	@awk 'BEGIN{FS=":.*##"} /^[a-z][a-zA-Z0-9_-]+:.*##/ {printf "  make %-10s %s\n", $$1, $$2}' $(MAKEFILE_LIST)
@@ -38,11 +44,32 @@ install: ## install test copy to local Plasma session
 doctor: ## diagnose "the bars don't move" (paste output into issues)
 	@bash package/contents/code/doctor.sh
 
-shaders: ## rebuild the waveform shader after editing visualizer.frag
-	@if command -v qsb >/dev/null 2>&1; then \
-	  qsb --glsl "100es,120,150" --hlsl 50 --msl 12 -o package/contents/shaders/visualizer.frag.qsb package/contents/shaders/visualizer.frag; \
+test: ## run the full test suite (software rendering, no desktop needed)
+	@if command -v qmltestrunner >/dev/null 2>&1; then \
+	  python3 tests/run.py; \
 	else \
-	  nix develop --command qsb --glsl "100es,120,150" --hlsl 50 --msl 12 -o package/contents/shaders/visualizer.frag.qsb package/contents/shaders/visualizer.frag; \
+	  nix develop --command python3 tests/run.py; \
+	fi
+
+parity: ## GPU shader vs Canvas on this desktop (opens a window; saves image pairs)
+	@dir="$${TMPDIR:-/tmp}/audio-visualizer-parity"; mkdir -p "$$dir"; \
+	runner="qmltestrunner"; command -v qmltestrunner >/dev/null 2>&1 || runner="nix develop --command qmltestrunner"; \
+	status=0; for suite in rendererparity orbitparity; do \
+	  QT_QPA_PLATFORMTHEME=generic QML_DISABLE_DISK_CACHE=1 $$runner -input tests/tst_$$suite.qml -import tests/stubs > "$$dir/$$suite.log" 2>&1 || status=1; \
+	  rg 'parity |^FAIL|^Totals' "$$dir/$$suite.log"; \
+	done; echo "logs: $$dir; Orbit captures: /tmp/orbit-*.png"; exit $$status
+
+compare-html: ## render styles 6-15 from docs/website/index.html and the widget; writes report.html
+	@out="$${TMPDIR:-/tmp}/audio-visualizer-html"; \
+	run="python3 tools/compare_html_visualizers.py --reference qt --extended --output $$out"; \
+	command -v qmltestrunner >/dev/null 2>&1 || run="nix develop --command $$run"; \
+	$$run; status=$$?; echo "report: $$out/report.html"; exit $$status
+
+shaders: ## rebuild every waveform shader family and its shared GLSL prelude
+	@if command -v qsb >/dev/null 2>&1; then \
+	  python3 package/contents/shaders/build_shaders.py; \
+	else \
+	  nix develop --command python3 package/contents/shaders/build_shaders.py; \
 	fi
 
 pack: ## build .plasmoid archive

@@ -1,0 +1,200 @@
+import QtQuick
+import QtTest
+import @UI@ as Shared
+import @STUDIO@ as Studio
+import @SCHEMA@ as Schema
+import @LAYOUTS@ as Layouts
+import @CONFIG@ as Config
+
+TestCase {
+    id: capture
+    name: "Gallery"
+    when: windowShown
+    visible: true
+    width: 520
+    height: 400
+    property var defaults
+    property var preset
+    property var settings
+    property var sheet
+    property var cells: []
+    property real cellWidth: 100
+    property real cellHeight: 100
+    readonly property real sheetMargin: 44
+    readonly property real sheetSpacing: 40
+    readonly property real captionHeight: 34
+    Studio.PreviewBackend { id: audio; running: false }
+    Studio.SamplePlayer { id: samplePlayer }
+
+    Rectangle {
+        id: scene
+        width: capture.width
+        height: capture.height
+        color: "#141b26"
+        Studio.Backdrop {
+            anchors.fill: parent
+            kind: capture.preset ? capture.preset.bd : "dusk"
+            detail: 2
+        }
+        Loader {
+            id: widget
+            anchors.centerIn: parent
+            active: false
+            sourceComponent: Shared.VisualizerView {
+                width: Layouts.size(capture.settings)[0]
+                height: Layouts.size(capture.settings)[1]
+                configuration: capture.settings
+                samplePlayback: true
+                visualizer: audio
+                player: samplePlayer
+                isPlaying: true
+                positionUnitsPerSecond: 1
+                accentColor: "#3daee9"
+                systemTextColor: "#eff0f1"
+            }
+        }
+    }
+    Rectangle {
+        id: board
+        visible: false
+        width: capture.width
+        height: capture.height
+        color: "#141b26"
+        Studio.Backdrop {
+            anchors.fill: parent
+            kind: capture.sheet ? capture.sheet.bd : "dusk"
+            // The sheet is grabbed at 2x, so the wallpaper needs twice the detail.
+            detail: 2
+        }
+        Grid {
+            anchors.centerIn: parent
+            columns: capture.sheet ? capture.sheet.columns : 2
+            spacing: capture.sheetSpacing
+            Repeater {
+                model: capture.cells
+                delegate: Column {
+                    id: cell
+                    required property var modelData
+                    spacing: 10
+                    Item {
+                        width: capture.cellWidth
+                        height: capture.cellHeight
+                        Shared.VisualizerView {
+                            anchors.centerIn: parent
+                            width: cell.modelData.size[0]
+                            height: cell.modelData.size[1]
+                            scale: capture.sheet ? capture.sheet.zoom : 1
+                            configuration: cell.modelData.settings
+                            samplePlayback: true
+                            visualizer: audio
+                            player: samplePlayer
+                            isPlaying: true
+                            positionUnitsPerSecond: 1
+                            accentColor: "#3daee9"
+                            systemTextColor: "#eff0f1"
+                        }
+                    }
+                    Rectangle {
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        width: label.implicitWidth + 22
+                        height: 24
+                        radius: height / 2
+                        color: "#99000000"
+                        Text {
+                            id: label
+                            anchors.centerIn: parent
+                            text: cell.modelData.title
+                            color: "#f2f6ff"
+                            font.pixelSize: 13
+                            font.weight: Font.Medium
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Component {
+        id: studioComponent
+        Studio.Studio { onEdited: next => draft = next }
+    }
+    function initTestCase() {
+        failOnWarning(/ReferenceError|TypeError|Unable|Binding loop|Failed to create/);
+        const request = new XMLHttpRequest();
+        request.open("GET", @XML@, false);
+        request.send();
+        defaults = Config.defaults(request.responseText);
+        verify(defaults.showMpris !== undefined);
+    }
+    function test_presets_data() {
+        return Schema.PRESETS.map(p => ({tag: p.id, preset: p}));
+    }
+    function save(item, name) {
+        let saved = false;
+        verify(item.grabToImage(result => {
+            saved = result.saveToFile(@OUTPUT@ + "/" + name + ".png");
+        }, Qt.size(item.width * 2, item.height * 2)));
+        tryVerify(() => saved, 10000, "Save high-resolution capture: " + name);
+    }
+    function test_presets(data) {
+        widget.active = false;
+        preset = data.preset;
+        settings = Schema.applyPreset(defaults, {}, preset.s, false);
+        const size = Layouts.size(settings);
+        // Tight framing follows the actual layout, including the tiny panel icons.
+        capture.width = size[0] + 48;
+        capture.height = size[1] + 48;
+        widget.active = true;
+        tryCompare(widget, "status", Loader.Ready);
+        verify(widget.item.hasPlayer);
+        verify(widget.item.shouldShow);
+        wait(350);
+        audio.frame(2375);
+        wait(80);
+        save(scene, preset.id);
+    }
+    function test_sheets_data() {
+        return @SHEETS@.map(sheet => ({tag: sheet.id, sheet: sheet}));
+    }
+    function test_sheets(data) {
+        widget.active = false;
+        scene.visible = false;
+        sheet = data.sheet;
+        const cells = data.sheet.members.map(id => {
+            const entry = Schema.PRESETS.find(p => p.id === id);
+            verify(entry, "Unknown preset on sheet: " + id);
+            const settings = Schema.applyPreset(defaults, {}, entry.s, false);
+            return {title: entry.name, settings: settings, size: Layouts.size(settings)};
+        });
+        const zoom = data.sheet.zoom;
+        capture.cellWidth = zoom * Math.max(...cells.map(c => c.size[0]));
+        capture.cellHeight = zoom * Math.max(...cells.map(c => c.size[1]));
+        const columns = data.sheet.columns;
+        const rows = Math.ceil(cells.length / columns);
+        capture.width = 2 * sheetMargin + columns * cellWidth + (columns - 1) * sheetSpacing;
+        capture.height = 2 * sheetMargin + rows * (cellHeight + captionHeight)
+            + (rows - 1) * sheetSpacing;
+        board.visible = true;
+        capture.cells = cells;
+        // Sheets hold several live widgets, so give every canvas time to settle.
+        wait(700);
+        audio.frame(2375);
+        wait(120);
+        save(board, data.sheet.id);
+        capture.cells = [];
+        board.visible = false;
+        scene.visible = true;
+    }
+    function test_studio() {
+        widget.active = false;
+        scene.visible = false;
+        capture.width = 1100;
+        capture.height = 760;
+        const studio = createTemporaryObject(studioComponent, capture, {
+            width: capture.width, height: capture.height,
+            defaults: defaults, draft: Object.assign({}, defaults)
+        });
+        verify(studio !== null);
+        wait(900);
+        save(studio, "studio");
+    }
+}

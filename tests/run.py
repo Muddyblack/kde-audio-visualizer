@@ -17,36 +17,27 @@ runner = shutil.which("qmltestrunner")
 if not runner:
     raise SystemExit("Qt 6 qmltestrunner must be on PATH")
 
+subprocess.run([sys.executable, str(REPO / "tools/sync_studio_assets.py")], check=True)
+subprocess.run(
+    [sys.executable, str(REPO / "tools/sync_studio_assets.py"), "--check"], check=True
+)
 subprocess.run([sys.executable, str(REPO / "tests/test_feeder.py")], check=True)
+subprocess.run([sys.executable, str(REPO / "tests/test_waybar.py")], check=True)
 
-# The widget loads the compiled shader, so an edit to visualizer.frag without
-# `make shaders` would silently keep drawing the old one. Same flags as make.
-shader = REPO / "package/contents/shaders/visualizer.frag"
+# The widget loads the compiled packages. Verify every family and the common
+# prelude with the same builder used by make, so a stale .qsb cannot pass.
 qsb = shutil.which("qsb")
 if qsb:
-    with tempfile.TemporaryDirectory(prefix="audio-visualizer-qsb-") as directory:
-        built = Path(directory) / "visualizer.frag.qsb"
-        subprocess.run(
-            [
-                qsb,
-                "--glsl",
-                "100es,120,150",
-                "--hlsl",
-                "50",
-                "--msl",
-                "12",
-                "-o",
-                str(built),
-                str(shader),
-            ],
-            check=True,
-        )
-        assert built.read_bytes() == shader.with_suffix(".frag.qsb").read_bytes(), (
-            "visualizer.frag.qsb is out of date: run make shaders"
-        )
-    print("PASS: compiled shader matches visualizer.frag")
+    subprocess.run(
+        [
+            sys.executable,
+            str(REPO / "package/contents/shaders/build_shaders.py"),
+            "--check",
+        ],
+        check=True,
+    )
 else:
-    print("SKIP: qsb is not on PATH; compiled shader not checked")
+    print("SKIP: qsb is not on PATH; compiled shader families not checked")
 
 
 def start(env, bars, method):

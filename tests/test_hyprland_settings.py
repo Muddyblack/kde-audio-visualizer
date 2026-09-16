@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Load the real shell/settings UI offscreen; exercise persistence and defaults."""
 
+import json
 import os
 from pathlib import Path
 import shutil
@@ -48,7 +49,7 @@ with tempfile.TemporaryDirectory(prefix="audio-settings-test-") as directory:
             # Explicit declarative rates override the lower desktop default;
             # a saved GUI rate still overrides both until Reset.
             (root / "defaults.json").write_text(
-                '{"sensitivity": 130, "alwaysVisible": false, "framerate": 30}'
+                '{"sensitivity": 130, "alwaysVisible": false, "framerate": 30, "detailFields": ["format"]}'
             )
         (root / "shell.qml").write_text(
             """import QtQuick
@@ -61,6 +62,9 @@ AudioVisualizerShell {
         onTriggered: {
             if (shell.configuration.sensitivity !== EXPECTED) console.log("FAIL: defaults/persistence");
             if (shell.configuration.framerate !== EXPECTED_RATE) console.log("FAIL: frame-rate precedence");
+            if (JSON.stringify(shell.configuration.detailFields) !== JSON.stringify(EXPECTED_FIELDS)) console.log("FAIL: StringList defaults/persistence");
+            if (shell.configuration.hAnchor !== EXPECTED_ANCHOR) console.log("FAIL: horizontal anchor defaults/persistence");
+            if (shell.configuration.layoutMode !== EXPECTED_LAYOUT) console.log("FAIL: layout defaults/persistence");
             shell.configure();
             shell.saveSettings(OVERRIDES);
         }
@@ -70,16 +74,32 @@ AudioVisualizerShell {
         running: true
         onTriggered: {
             if (shell.configuration.framerate !== SAVED_RATE) console.log("FAIL: saved/reset frame rate");
+            if (JSON.stringify(shell.configuration.detailFields) !== JSON.stringify(SAVED_FIELDS)) console.log("FAIL: saved/reset StringList");
+            if (shell.configuration.hAnchor !== SAVED_ANCHOR) console.log("FAIL: saved/reset horizontal anchor");
+            if (shell.configuration.layoutMode !== SAVED_LAYOUT) console.log("FAIL: saved/reset layout");
             console.log("SETTINGS TEST COMPLETE"); Qt.quit();
         }
     }
 }
 """.replace("EXPECTED_RATE", "15" if phase == 0 else "5")
             .replace("SAVED_RATE", "5" if phase == 0 else "30")
+            .replace(
+                "EXPECTED_FIELDS",
+                '["album", "genre", "format", "player"]'
+                if phase == 0
+                else '["player", "album"]',
+            )
+            .replace(
+                "SAVED_FIELDS", '["player", "album"]' if phase == 0 else '["format"]'
+            )
+            .replace("EXPECTED_ANCHOR", '"center"' if phase == 0 else '"right"')
+            .replace("SAVED_ANCHOR", '"right"' if phase == 0 else '"center"')
+            .replace("EXPECTED_LAYOUT", '"classic"' if phase == 0 else '"poster"')
+            .replace("SAVED_LAYOUT", '"poster"' if phase == 0 else '"classic"')
             .replace("EXPECTED", "130" if phase == 0 else "175")
             .replace(
                 "OVERRIDES",
-                '{monitor: "all", sensitivity: 175, framerate: 5}'
+                '{monitor: "all", sensitivity: 175, framerate: 5, detailFields: ["player", "album"], hAnchor: "right", layoutMode: "poster"}'
                 if phase == 0
                 else "{}",
             )
@@ -100,9 +120,18 @@ AudioVisualizerShell {
                 "Binding loop",
             ]
         ), log
-        saved = (root / "audio-wave-visualizer/hyprland.json").read_text()
+        saved = json.loads((root / "audio-wave-visualizer/hyprland.json").read_text())
         if phase == 0:
-            assert '"sensitivity": 175' in saved and '"monitor": "all"' in saved, saved
+            assert saved == {
+                "monitor": "all",
+                "sensitivity": 175,
+                "framerate": 5,
+                "detailFields": ["player", "album"],
+                "hAnchor": "right",
+                "layoutMode": "poster",
+            }, saved
         else:
-            assert saved.strip() == "{}", saved
-    print("PASS: real settings UI, Nix defaults, saved overrides, reload and reset")
+            assert saved == {}, saved
+    print(
+        "PASS: real settings UI, Nix defaults, scalar/StringList overrides, reload and reset"
+    )

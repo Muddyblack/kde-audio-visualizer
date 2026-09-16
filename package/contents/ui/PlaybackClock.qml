@@ -23,6 +23,8 @@ Item {
     readonly property int totalSeconds: Math.max(0, Math.floor(lengthValue / unitsPerSecond))
     readonly property string elapsedText: formatTime(elapsedSeconds)
     readonly property string totalText: formatTime(totalSeconds)
+    readonly property int remainingSeconds: Math.max(0, Math.floor((lengthValue - displayedPosition) / unitsPerSecond))
+    readonly property string remainingText: "-" + formatTime(remainingSeconds)
     readonly property bool ticking: active && playing && !!player && lengthValue > 0 && displayedPosition < lengthValue
 
     function clamp(value, min, max) {
@@ -39,6 +41,27 @@ Item {
         anchorPosition = clamp(position, 0, lengthValue);
         anchorMs = Date.now();
         displayedPosition = anchorPosition;
+    }
+
+    // Both linear bars and cover rings seek in the player's native units.
+    function seekToFraction(fraction) {
+        const p = player;
+        if (!p || p.canControl === false || p.canSeek === false || p.positionSupported === false)
+            return false;
+        const length = p.length || p.mprisLength || 0;
+        if (!Number.isFinite(length) || length <= 0 || !Number.isFinite(fraction))
+            return false;
+        const position = clamp(fraction, 0, 1) * length;
+        if (p.position !== undefined)
+            p.position = position;
+        else if (typeof p.SetPosition === "function")
+            p.SetPosition(position);
+        else if (typeof p.setPosition === "function")
+            p.setPosition(position);
+        else
+            return false;
+        setPosition(position);
+        return true;
     }
 
     function syncFromPlayer(hard) {

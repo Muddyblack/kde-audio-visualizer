@@ -1,7 +1,8 @@
-import QtQuick 2.15
-import QtQuick.Controls as QQC
-import QtQuick.Layouts 1.1
-import QtQuick.Effects
+pragma ComponentBehavior: Bound
+import QtQuick
+import QtQuick.Controls.Basic as Controls
+import "layouts" as Layouts
+import "../code/Layouts.js" as LayoutSizes
 
 Item {
     id: root
@@ -10,31 +11,118 @@ Item {
     required property var visualizer
     property var player: null
     property bool isPlaying: false
+    // Synthetic previews must not send sample metadata to lyrics services.
+    property bool samplePlayback: false
+    property Item backdropSource: null
+    // Host scale is separate from logical layout size, for artwork sampling.
+    property real renderScale: scale
     property color accentColor: "#b4befe"
     property color systemTextColor: "#cdd6f4"
     property string defaultFontFamily: Qt.application.font.family
     property Component fallbackIcon
+    // Plasma supplies ImageColors; other hosts sample a tiny static cover.
+    property var coverPalette: null
+    // "card" follows layoutMode; hosts use "pill" or "pillicon" in panels.
+    property string presentation: "card"
+    // Pill click with pillClick "popup": the host opens the full card.
+    signal popupRequested
+    readonly property color baseWaveColor: configuration.useSystemAccent ? accentColor : configuration.customColor
+    readonly property color coverColor1: coverPalette ? coverPalette.dominant : (coverSampler.item?.primary ?? baseWaveColor)
+    readonly property color coverColor2: coverPalette ? coverPalette.dominantContrast : (coverSampler.item?.secondary ?? baseWaveColor)
+    readonly property color coverAccent: coverPalette ? coverPalette.highlight : (coverSampler.item?.accent ?? baseWaveColor)
+    Loader {
+        id: coverSampler
+        active: !root.coverPalette && root.shouldShow && root.artUrl !== "" && (root.configuration.accentFromArt || root.configuration.vizColorMode === "cover" || (root.configuration.showBg && (root.configuration.surfaceStyle === "atmosphere" || (root.configuration.surfaceStyle === "liquid" && root.configuration.glassTint === "cover"))))
+        sourceComponent: CoverColors {
+            source: root.artUrl
+            fallback: root.baseWaveColor
+        }
+    }
     // Zero preserves Plasma's historical unit detection; Quickshell uses seconds.
     property real positionUnitsPerSecond: 0
     // Decorative motion shares audio frames; it must not start its own
     // display-refresh animation loop on every monitor.
     readonly property real visualFrameTime: visualizer.frameTimeMs ?? 0
-    onVisualFrameTimeChanged: {
-        if (positionClock.active && root.isPlaying)
-            positionClock.tick();
-    }
 
     readonly property bool shouldShow: hasPlayer || configuration.alwaysVisible
-    implicitWidth: configuration.showMpris ? 360 : 200
-    implicitHeight: configuration.showMpris ? 104 : 84
+    implicitWidth: (layoutLoader.item as Item)?.implicitWidth ?? 360
+    implicitHeight: (layoutLoader.item as Item)?.implicitHeight ?? 104
     readonly property bool hasPlayer: !!player
     property string artist: player?.artist ?? ""
     property string track: player?.track ?? ""
     property string playerArtUrl: player?.artUrl ?? ""
     readonly property string desktopEntry: player?.desktopEntry ?? ""
-    readonly property color textColor: configuration.useSystemText ? systemTextColor : configuration.customTextColor
-    readonly property color waveColor: configuration.useSystemAccent ? accentColor : configuration.customColor
-    readonly property color controlColor: configuration.useSystemControls ? "#ffffff" : configuration.customControlColor
+
+    // Track information (Plasma PlayerContainer or Quickshell MprisPlayer).
+    readonly property string album: player?.album ?? player?.trackAlbum ?? ""
+    readonly property var metadata: player?.metadata ?? ({})
+    readonly property string genre: {
+        const value = metadata["xesam:genre"];
+        return Array.isArray(value) ? value.join(", ") : String(value ?? "");
+    }
+    readonly property int trackNumber: Number(metadata["xesam:trackNumber"] ?? 0) || 0
+    readonly property string year: String(metadata["xesam:contentCreated"] ?? "").slice(0, 4)
+    readonly property string playerName: player?.identity ?? ""
+    readonly property real volume: player && player.volume !== undefined ? player.volume : -1
+    readonly property string lengthText: {
+        const length = player ? (player.length || player.mprisLength || 0) : 0;
+        if (length <= 0)
+            return "";
+        const units = positionUnitsPerSecond > 0 ? positionUnitsPerSecond : length >= 1000000 ? 1000000 : length >= 10000 ? 1000 : 1;
+        const seconds = Math.floor(length / units);
+        return Math.floor(seconds / 60) + ":" + String(seconds % 60).padStart(2, "0");
+    }
+    // Hosts that know every running player set these for the player switcher.
+    property int playerCount: hasPlayer ? 1 : 0
+    property var switchPlayer: null
+    readonly property bool lyricsEnabled: (configuration.showLyrics ?? false) || layoutMode === "lyrics"
+    readonly property var lyricLines: samplePlayback && lyricsEnabled ? [
+        {
+            time: 0,
+            text: "The light falls softly on the water"
+        },
+        {
+            time: 8,
+            text: "And the city fades to blue"
+        },
+        {
+            time: 16,
+            text: "Let the evening drift away"
+        },
+        {
+            time: 24,
+            text: "There is nothing left to hurry"
+        },
+        {
+            time: 32,
+            text: "Just a little room to stay"
+        },
+        {
+            time: 40,
+            text: "With the rhythm of the rain"
+        }
+    ] : lyricsLoader.item?.lines ?? []
+    readonly property int lyricIndex: samplePlayback && lyricsEnabled ? 2 : lyricsLoader.item?.currentIndex ?? -1
+    readonly property string lyricLine: lyricIndex >= 0 && lyricIndex < lyricLines.length ? lyricLines[lyricIndex].text : ""
+    readonly property string lyricStatus: !hasPlayer ? "idle" : trackUnknown || artist === "" ? "metadata" : samplePlayback ? "ready" : lyricsLoader.item?.status ?? "loading"
+
+    readonly property string detailsMode: layoutMode === "lyrics" || !hasPlayer || trackUnknown ? "off" : (configuration.hoverDetails ?? "off")
+    readonly property bool panelForm: layoutMode === "pill" || layoutMode === "pillicon"
+    readonly property bool flipEnabled: detailsMode === "flip" && layoutMode !== "strip" && !panelForm
+    property bool detailsOpen: false
+    readonly property bool flipped: flipEnabled && detailsOpen
+    onFlipEnabledChanged: {
+        if (!flipEnabled)
+            detailsOpen = false;
+    }
+    // Tooltip and drawer are shown by the host in a popup outside the card.
+    readonly property bool detailsVisible: (detailsMode === "tooltip" || detailsMode === "drawer" || (detailsMode === "flip" && (layoutMode === "strip" || panelForm))) && cardHovered
+    readonly property string detailsPopupMode: detailsMode === "drawer" ? "drawer" : "tooltip"
+    // Solid cards are light: system text and controls switch to dark ink.
+    readonly property bool lightCard: configuration.showBg && configuration.surfaceStyle === "solid" && !(configuration.showMpris && configuration.artBg && artUrl !== "") && (configuration.autoContrast ?? true)
+    readonly property color textColor: configuration.useSystemText ? (lightCard ? "#1e241d" : systemTextColor) : configuration.customTextColor
+    readonly property color waveColor: configuration.accentFromArt ? coverAccent : baseWaveColor
+    readonly property color controlColor: configuration.useSystemControls ? (lightCard ? "#1e241d" : "#ffffff") : configuration.customControlColor
     readonly property color pgStartColor: configuration.useSystemControls ? accentColor : controlColor
     readonly property color pgEndColor: configuration.useSystemControls ? "#ffffff" : controlColor
 
@@ -83,10 +171,10 @@ Item {
         const host = (s.match(/^[a-z][a-z0-9+.-]*:\/\/([^/?#]*)/i) || ["", ""])[1].toLowerCase();
         // googlevideo params survive even when the host got chopped off
         if (host.endsWith("googlevideo.com") || /(^|&)(itag|clen|gir|lmt|fvip|ratebypass|sparams)=/i.test(s))
-            return "Direct YouTube stream";
+            return qsTr("Direct YouTube stream");
         if (host !== "")
             return host.replace(/^www\./, "");
-        return "Player published no title";
+        return qsTr("Player published no title");
     }
 
     property string artUrl: ""
@@ -108,7 +196,185 @@ Item {
             artUrl = url;
     }
 
+    // Artwork click opens a transient lightbox outside the card bounds.
+    property bool zoomOpen: false
+    Loader {
+        active: root.zoomOpen
+        sourceComponent: ArtworkLightbox {
+            view: root
+        }
+    }
+    readonly property bool cardHovered: cardHover.hovered
+
+    // Behaviour (docs/redesign-plan.md §7.5).
+    readonly property bool idleMessage: !hasPlayer && (configuration.idleText ?? false)
+    readonly property bool pausedPlayer: hasPlayer && !isPlaying
+    // Hosts report the power source; battery saver caps frames and drops glow.
+    property bool onBattery: false
+    readonly property bool batterySaving: onBattery && (configuration.batterySaver ?? false)
+    readonly property bool lifted: layoutMode !== "lyrics" && (configuration.hoverLift ?? false) && cardHovered
+
+    function togglePlayback() {
+        const p = player;
+        if (!p || p.canTogglePlaying === false)
+            return;
+        if (p.togglePlaying)
+            p.togglePlaying();
+        else if (p.playPause)
+            p.playPause();
+        else if (p.PlayPause)
+            p.PlayPause();
+    }
+    function previousTrack() {
+        const p = player;
+        if (p && p.canGoPrevious !== false)
+            (p.previous || p.Previous || function () {}).call(p);
+    }
+    function nextTrack() {
+        const p = player;
+        if (p && p.canGoNext !== false)
+            (p.next || p.Next || function () {}).call(p);
+    }
+    function activatePill() {
+        if ((configuration.pillClick ?? "popup") === "toggle")
+            togglePlayback();
+        else
+            popupRequested();
+    }
+
+    // Scrolling adjusts the system's output volume (via pactl) rather than the
+    // MPRIS player's own volume, which most players don't implement at all.
+    property real systemVolume: -1
+    property real requestedVolume: -1
+    readonly property real displayedVolume: requestedVolume >= 0 ? requestedVolume : Math.max(0, systemVolume)
+    onSystemVolumeChanged: {
+        // pactl reports whole percent, so match the request within that grain.
+        if (requestedVolume >= 0 && Math.abs(systemVolume - requestedVolume) < 0.006) {
+            requestedVolume = -1;
+            volumeRequestTimeout.stop();
+        }
+    }
+    function resetVolumeGesture() {
+        requestedVolume = -1;
+        volumeRequestTimeout.stop();
+        volumeHide.stop();
+        volumeOsd.shown = false;
+    }
+    function queryVolume() {
+        sysVolumeSource.connectSource("pactl get-sink-volume @DEFAULT_SINK@");
+    }
+    function commitVolume() {
+        if (requestedVolume < 0)
+            return;
+        sysVolumeSource.connectSource("pactl set-sink-volume @DEFAULT_SINK@ " + Math.round(requestedVolume * 100) + "%; pactl get-sink-volume @DEFAULT_SINK@");
+    }
+    function scrollSystemVolume(angleDelta, pixelDelta) {
+        if (!volumeWheel.enabled)
+            return false;
+        // A wheel notch is 120 angle units; touchpads can send pixels only.
+        const step = pixelDelta !== 0 ? pixelDelta / 40 * 0.04 : angleDelta / 120 * 0.04;
+        if (!Number.isFinite(step) || step === 0)
+            return false;
+        requestedVolume = Math.max(0, Math.min(1, displayedVolume + step));
+        volumeRequestTimeout.restart();
+        // Coalesce rapid wheel ticks into one shell call instead of one per notch.
+        volumeCommitTimer.restart();
+        volumeOsd.shown = true;
+        volumeHide.restart();
+        return true;
+    }
+    CommandSource {
+        id: sysVolumeSource
+        sourceComponent: root.visualizer?.commandSourceComponent
+        onNewData: function (source, data) {
+            disconnectSource(source);
+            const match = /(\d+)%/.exec(data["stdout"] || "");
+            if (match)
+                root.systemVolume = Math.max(0, Math.min(1, Number(match[1]) / 100));
+        }
+    }
+    Timer {
+        id: volumeCommitTimer
+        interval: 60
+        onTriggered: root.commitVolume()
+    }
+    Timer {
+        id: volumeRequestTimeout
+        interval: 750
+        onTriggered: root.requestedVolume = -1
+    }
+    WheelHandler {
+        id: volumeWheel
+        objectName: "volumeWheel"
+        target: null
+        enabled: root.visible && !root.zoomOpen && !root.flipped && root.layoutMode !== "lyrics" && (root.configuration.scrollVolume ?? false) && root.hasPlayer && !!root.visualizer?.commandSourceComponent
+        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+        onEnabledChanged: {
+            root.resetVolumeGesture();
+            if (enabled)
+                root.queryVolume();
+        }
+        onWheel: event => {
+            event.accepted = root.scrollSystemVolume(event.angleDelta.y, event.pixelDelta.y);
+        }
+    }
+    Timer {
+        id: volumeHide
+        interval: 1100
+        onTriggered: volumeOsd.shown = false
+    }
+    // Keep the feedback inside the host bounds so panels cannot clip it.
+    Rectangle {
+        id: volumeOsd
+        objectName: "volumeOsd"
+        property bool shown: false
+        x: Math.max(0, root.width - width - 3)
+        y: root.height * 0.08
+        width: 6
+        height: root.height * 0.84
+        radius: 6
+        color: Qt.rgba(0, 0, 0, 0x77 / 255)
+        border.color: Qt.rgba(1, 1, 1, 0x26 / 255)
+        border.width: 1
+        clip: true
+        opacity: shown ? 1 : 0
+        visible: opacity > 0
+        Behavior on opacity {
+            NumberAnimation {
+                duration: 250
+            }
+        }
+        Rectangle {
+            anchors.bottom: parent.bottom
+            width: parent.width
+            height: parent.height * root.displayedVolume
+            color: root.waveColor
+        }
+    }
+
+    HoverHandler {
+        id: cardHover
+    }
+
+    Loader {
+        id: lyricsLoader
+        active: !root.samplePlayback && root.lyricsEnabled && root.hasPlayer && !root.trackUnknown
+        sourceComponent: LyricsSource {
+            player: root.player
+            isPlaying: root.isPlaying
+            track: root.displayTrack
+            artist: root.artist
+            album: root.album
+            positionUnitsPerSecond: root.positionUnitsPerSecond
+            timingOffset: root.configuration.lyricsOffset ?? 0
+            visualFrameTime: root.visualFrameTime
+        }
+    }
+
     onPlayerChanged: {
+        resetVolumeGesture();
+        detailsOpen = false;
+        zoomOpen = false;
         artUrl = "";
         _refreshArtUrl();
     }
@@ -119,932 +385,249 @@ Item {
     onShowMprisChanged: _refreshArtUrl()
 
     Item {
-        id: container
+        id: front
+        objectName: "playbackFace"
+        enabled: !root.flipped && frontTurn.angle === 0
         anchors.fill: parent
         visible: root.shouldShow
-        // No clip — clipping cuts off text when background card is enabled
-
-        // ── Background card source (rendered offscreen, used by backgroundCardEffect) ──
-        // Art image source — must be a sibling, not child of backgroundCard
-        Image {
-            id: bgArtImg
-            anchors.fill: parent
-            source: (root.configuration.showMpris && root.configuration.artBg) ? root.artUrl : ""
-            fillMode: Image.PreserveAspectCrop
-            asynchronous: true
-            cache: true
-            visible: false
+        // No clip: text and control shadows may extend beyond the card.
+        // The flip turns each face separately and swaps them halfway;
+        // backface visibility is unreliable with effects and canvases.
+        opacity: Math.abs(frontTurn.angle) < 90 ? 1 : 0
+        transform: (root.flipEnabled ? [frontTurn] : []).concat((root.configuration.hoverLift ?? false) ? [liftScale, liftShift] : [])
+        Scale {
+            id: liftScale
+            origin.x: front.width / 2
+            origin.y: front.height / 2
+            xScale: root.lifted ? 1.01 : 1
+            yScale: xScale
+            Behavior on xScale {
+                NumberAnimation {
+                    duration: 300
+                    easing.type: Easing.OutCubic
+                }
+            }
+        }
+        Translate {
+            id: liftShift
+            y: root.lifted ? -3 : 0
+            Behavior on y {
+                NumberAnimation {
+                    duration: 300
+                    easing.type: Easing.OutCubic
+                }
+            }
+        }
+        Rotation {
+            id: frontTurn
+            origin.x: front.width / 2
+            origin.y: front.height / 2
+            axis.x: 0
+            axis.y: 1
+            axis.z: 0
+            angle: root.flipped ? -180 : 0
+            Behavior on angle {
+                NumberAnimation {
+                    duration: (root.configuration.reducedMotion ?? false) ? 0 : 350
+                    easing.type: Easing.InOutCubic
+                }
+            }
         }
 
-        Rectangle {
-            id: backgroundCard
+        CardSurface {
+            backdropSource: root.backdropSource
             anchors.fill: parent
-            visible: false
-            radius: root.configuration.bgRadius
-            color: "transparent"
-            clip: true
+            configuration: root.layoutMode === "lyrics" ? Object.assign({}, root.configuration, {
+                artBg: false
+            }) : root.configuration
+            artUrl: root.artUrl
+            hasPlayer: root.hasPlayer
+            cardRadius: root.panelForm ? root.height / 2 : root.configuration.bgRadius
+            accentColor: root.waveColor
+            coverColor1: root.coverColor1
+            coverColor2: root.coverColor2
+            bass: root.visualizer.bass ?? 0
+        }
 
-            // Crisp art fill — light blur keeps the cover clearly recognizable
-            // (premium "bold cover" look) while still softening hard detail so
-            // the wave/text read on top. Brighter + saturated vs the old heavy
-            // frosted treatment.
-            MultiEffect {
-                anchors.fill: parent
-                source: bgArtImg
-                blurEnabled: true
-                // User-controlled blur (0 = crisp cover, 1 = heavy frost).
-                blur: root.configuration.artBgBlur
-                blurMax: 48
-                saturation: 0.85
-                opacity: (root.configuration.artBg && bgArtImg.status === Image.Ready) ? 1.0 : 0.0
-                Behavior on blur {
-                    NumberAnimation {
-                        duration: 250
-                    }
+        // Panel forms: hover tint without a card, and a click on the pill.
+        Rectangle {
+            anchors.fill: parent
+            visible: root.panelForm && !root.configuration.showBg && root.cardHovered
+            radius: height / 2
+            color: Qt.rgba(1, 1, 1, 0x14 / 255)
+        }
+        MouseArea {
+            objectName: "pillClickArea"
+            anchors.fill: parent
+            enabled: root.panelForm
+            visible: enabled
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.activatePill()
+        }
+
+        Loader {
+            id: layoutLoader
+            objectName: "layoutLoader"
+            anchors.fill: parent
+            // Dim the content (not the card) while paused.
+            opacity: (root.configuration.dimWhenPaused ?? false) && root.pausedPlayer ? 0.55 : 1
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: 300
                 }
-                Behavior on opacity {
+            }
+            sourceComponent: ({
+                    mirrored: mirroredLayout,
+                    inline: inlineLayout,
+                    hero: heroLayout,
+                    stacked: stackedLayout,
+                    poster: posterLayout,
+                    strip: stripLayout,
+                    orbit: orbitLayout,
+                    lyrics: lyricsLayout,
+                    pill: pillLayout,
+                    pillicon: pillIconLayout
+                })[root.layoutMode] ?? classicLayout
+        }
+    }
+
+    Loader {
+        anchors.fill: parent
+        active: root.flipEnabled && root.shouldShow
+        sourceComponent: Item {
+            id: backFace
+            enabled: root.flipped && backTurn.angle === 0
+            objectName: "flipBack"
+            opacity: Math.abs(backTurn.angle) < 90 ? 1 : 0
+            transform: Rotation {
+                id: backTurn
+                origin.x: backFace.width / 2
+                origin.y: backFace.height / 2
+                axis.x: 0
+                axis.y: 1
+                axis.z: 0
+                angle: root.flipped ? 0 : 180
+                Behavior on angle {
                     NumberAnimation {
-                        duration: 400
+                        duration: (root.configuration.reducedMotion ?? false) ? 0 : 350
+                        easing.type: Easing.InOutCubic
                     }
                 }
             }
-
-            // Whether the album art is actually being used as the fill right now.
-            property bool artMode: root.configuration.artBg && bgArtImg.status === Image.Ready
-
-            // Solid-colour fill — ONLY when not in art mode (art mode has its
-            // own image fill above). Kept as its own rectangle (no gradient on
-            // it) so there's never a color↔gradient conflict on a single
-            // Rectangle, which was painting the whole card black.
-            //
-            // While idle (no MPRIS player at all — nothing to show art or a
-            // custom colour for) fall back to a soft glass tint instead of the
-            // raw configured bgColor, which otherwise defaults to near-black
-            // and reads as a dead solid box. This mirrors the dock's default
-            // glass look and keeps the idle state looking clean rather than
-            // just "off". Once a player appears, the user's configured
-            // background (colour or art) takes over as before.
-            Rectangle {
+            CardMaterial {
                 anchors.fill: parent
-                visible: !backgroundCard.artMode
-                color: root.hasPlayer ? root.configuration.bgColor : Qt.rgba(1, 1, 1, 0.06)
-            }
-
-            // NOTE: the art-darkness scrim is intentionally NOT here. backgroundCard
-            // is visible:false and used only as a texture source for
-            // backgroundCardEffect, so changing a child's opacity inside it does
-            // not re-trigger the MultiEffect's texture capture (blur works because
-            // it's a live property on the effect pipeline; child opacity does not).
-            // The scrim lives in the live scene on top of the effect instead —
-            // see `artScrim` below.
-
-            // Border on top
-            Rectangle {
-                anchors.fill: parent
-                color: "transparent"
+                material: root.configuration.showBg && ["liquid", "solid", "atmosphere"].indexOf(root.configuration.surfaceStyle) !== -1 ? root.configuration.surfaceStyle : "glass"
                 radius: root.configuration.bgRadius
-                border.color: Qt.rgba(1, 1, 1, 0.12)
-                border.width: 1
+                cover1: root.coverColor1
+                cover2: root.coverColor2
+            }
+            TrackDetails {
+                anchors.fill: parent
+                view: root
+                mode: "back"
             }
         }
+    }
 
-        MultiEffect {
-            id: backgroundCardEffect
-            anchors.fill: parent
-            source: backgroundCard
-            visible: root.configuration.showBg
-
-            // Round the whole composited card (art + tint + border) in one pass.
-            maskEnabled: true
-            maskSource: cardRoundMask
-
-            // Background card transparency — art + blur fade together as one layer.
-            // Wave, text and controls remain fully opaque on top.
-            opacity: root.configuration.artBgTransparency
-            Behavior on opacity {
-                NumberAnimation {
-                    duration: 200
-                }
-            }
+    // This control stays outside both transformed faces. Hovering the card
+    // must never hide playback controls or move the way back to them.
+    Controls.ToolButton {
+        objectName: "flipDetailsButton"
+        anchors.top: parent.top
+        anchors.right: parent.right
+        anchors.margins: 4
+        width: 22
+        height: 22
+        visible: root.flipEnabled && root.shouldShow && !root.zoomOpen
+        focusPolicy: Qt.StrongFocus
+        text: root.flipped ? "×" : "i"
+        Accessible.name: root.flipped ? "Return to playback controls" : "Show track details"
+        Controls.ToolTip.visible: hovered
+        Controls.ToolTip.text: Accessible.name
+        Controls.ToolTip.delay: 500
+        onClicked: root.detailsOpen = !root.detailsOpen
+        Keys.onEscapePressed: root.detailsOpen = false
+        contentItem: Text {
+            text: parent.text
+            color: root.textColor
+            font.pixelSize: 14
+            horizontalAlignment: Text.AlignHCenter
+            verticalAlignment: Text.AlignVCenter
         }
-
-        // Rounded-rectangle alpha mask for backgroundCardEffect. Rendered to a
-        // texture (layer.enabled) so the MultiEffect can sample it; never shown.
-        Rectangle {
-            id: cardRoundMask
-            anchors.fill: parent
-            radius: root.configuration.bgRadius
-            color: "black"
-            visible: false
-            layer.enabled: true
+        background: Rectangle {
+            radius: width / 2
+            color: parent.hovered ? "#55303030" : "#33202020"
+            border.color: "#33ffffff"
         }
+    }
 
-        // Art-darkness scrim — LIVE in the scene (not inside the captured
-        // backgroundCard source), so its opacity reacts instantly to the slider.
-        // A plain Rectangle's own rounded gradient fill stays inside its corners
-        // (the earlier corner-leak only affected clipped CHILDREN), so radius +
-        // antialiasing is enough here without a separate mask pass.
-        Rectangle {
-            id: artScrim
-            anchors.fill: parent
-            antialiasing: true
-            radius: root.configuration.bgRadius
-            visible: root.configuration.showBg && root.configuration.artBg && bgArtImg.status === Image.Ready
-            // 0 = art fully visible · 1 = strongly dimmed for readability.
-            // Also inherits the background transparency so it fades with the card.
-            opacity: root.configuration.artBgDim * root.configuration.artBgTransparency
-            gradient: Gradient {
-                GradientStop {
-                    position: 0.0
-                    color: Qt.rgba(0, 0, 0, 0.72)
-                }
-                GradientStop {
-                    position: 0.5
-                    color: Qt.rgba(0, 0, 0, 0.85)
-                }
-                GradientStop {
-                    position: 1.0
-                    color: Qt.rgba(0, 0, 0, 0.98)
-                }
-            }
-            Behavior on opacity {
-                NumberAnimation {
-                    duration: 200
-                }
-            }
+    readonly property string layoutMode: presentation !== "card" ? presentation : LayoutSizes.mode(configuration)
+
+    Component {
+        id: classicLayout
+        Layouts.Classic {
+            view: root
         }
-
-        RowLayout {
-            anchors.fill: parent
-            anchors.leftMargin: root.configuration.showBg ? 10 : 0
-            anchors.rightMargin: root.configuration.showBg ? 10 : 0
-            anchors.topMargin: root.configuration.showBg ? 4 : 0
-            anchors.bottomMargin: 0
-            spacing: root.configuration.showMpris ? 12 : 0
-
-            // ── Album art and controls ────────────────────────────────────────
-            ColumnLayout {
-                id: artColumn
-                spacing: 4
-                Layout.fillHeight: true
-                Layout.alignment: Qt.AlignVCenter
-                visible: root.configuration.showMpris
-
-                // When the thumbnail is hidden (art-bg mode) the dock is the only
-                // child and floats dead-centre. This flexible spacer pushes it
-                // toward the lower third so it sits over the darker part of the
-                // scrim and lines up better with the track text beside it.
-                Item {
-                    Layout.fillHeight: true
-                    Layout.preferredHeight: 1
-                    visible: !artBox.visible
-                }
-
-                Item {
-                    id: artBox
-                    // Hidden when the art is already the card background (redundant),
-                    // unless the user opts to keep the sharp thumbnail layered over
-                    // the blurred/darkened background (artBgKeepThumb).
-                    visible: root.configuration.showArtThumb && (!root.artIsBackground || root.configuration.artBgKeepThumb)
-                    Layout.fillHeight: true
-                    Layout.maximumHeight: 72
-                    Layout.preferredWidth: visible ? Math.min(artBox.height, 72) : 0
-                    Layout.maximumWidth: 72
-                    Layout.alignment: Qt.AlignHCenter
-                    width: Math.min(height, 72)
-
-                    Rectangle {
-                        anchors.fill: parent
-                        radius: 10
-                        color: Qt.rgba(1, 1, 1, 0.05)
-                        border.color: Qt.rgba(1, 1, 1, 0.18)
-                        border.width: 1
-                    }
-
-                    Loader {
-                        anchors.centerIn: parent
-                        sourceComponent: root.fallbackIcon
-                        width: root.desktopEntry !== "" ? parent.width * 0.72 : parent.width * 0.45
-                        height: width
-                        opacity: root.desktopEntry !== "" ? 0.70 : 0.35
-                        Behavior on opacity {
-                            NumberAnimation {
-                                duration: 200
-                            }
-                        }
-                    }
-
-                    Image {
-                        id: artImg
-                        anchors.fill: parent
-                        source: root.configuration.showMpris ? root.artUrl : ""
-                        fillMode: Image.PreserveAspectCrop
-                        asynchronous: true
-                        cache: true
-                        visible: false
-                    }
-
-                    Rectangle {
-                        id: artMask
-                        anchors.fill: parent
-                        radius: 10
-                        visible: false
-                        layer.enabled: true
-                    }
-
-                    MultiEffect {
-                        anchors.fill: parent
-                        source: artImg
-                        maskEnabled: true
-                        maskSource: artMask
-                        opacity: (artImg.status === Image.Ready || artImg.status === Image.Loading) ? 1.0 : 0.0
-                        Behavior on opacity {
-                            NumberAnimation {
-                                duration: 400
-                            }
-                        }
-                    }
-                }
-
-                // ── Glassy transport dock ─────────────────────────────────────
-                Item {
-                    id: controlDock
-                    Layout.alignment: Qt.AlignHCenter
-                    Layout.preferredWidth: 88
-                    Layout.preferredHeight: 26
-                    visible: root.hasPlayer
-
-                    Rectangle {
-                        anchors.fill: parent
-                        radius: height / 2
-                        // Darker, cleaner glass: a deeper translucent base reads as
-                        // a single calm surface against busy album art, instead of
-                        // the milky look a light tint gives over a bright cover.
-                        color: root.configuration.useSystemDockBg ? Qt.rgba(0, 0, 0, 0.28) : root.configuration.customDockBgColor
-                        border.color: Qt.rgba(1, 1, 1, 0.16)
-                        border.width: 1
-
-                        layer.enabled: true
-                        layer.effect: MultiEffect {
-                            shadowEnabled: true
-                            shadowColor: Qt.rgba(0, 0, 0, 0.35)
-                            shadowOpacity: 0.35
-                            shadowBlur: 0.25
-                            shadowVerticalOffset: 1
-                        }
-
-                        // Soft top highlight — the glassy sheen catching light.
-                        Rectangle {
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            anchors.top: parent.top
-                            anchors.leftMargin: 9
-                            anchors.rightMargin: 9
-                            anchors.topMargin: 1
-                            height: 1
-                            radius: 0.5
-                            color: Qt.rgba(1, 1, 1, 0.18)
-                        }
-                    }
-
-                    RowLayout {
-                        id: controlRow
-                        anchors.centerIn: parent
-                        spacing: 2
-
-                        // Previous Button
-                        Item {
-                            id: prevBtn
-                            Layout.preferredWidth: 22
-                            Layout.preferredHeight: 22
-                            scale: prevArea.pressed ? 0.94 : (prevArea.containsMouse ? 1.07 : 1.0)
-                            Behavior on scale {
-                                NumberAnimation {
-                                    duration: 130
-                                    easing.type: Easing.OutCubic
-                                }
-                            }
-
-                            Canvas {
-                                id: prevIcon
-                                anchors.centerIn: parent
-                                width: 12
-                                height: 12
-                                opacity: prevArea.containsMouse ? 1.0 : 0.78
-                                onPaint: {
-                                    const ctx = getContext("2d");
-                                    ctx.reset();
-                                    ctx.fillStyle = root.controlColor;
-                                    ctx.beginPath();
-                                    ctx.moveTo(10, 1.5);
-                                    ctx.lineTo(1.5, 6);
-                                    ctx.lineTo(10, 10.5);
-                                    ctx.closePath();
-                                    ctx.fill();
-                                }
-                                Connections {
-                                    target: root
-                                    function onControlColorChanged() {
-                                        prevIcon.requestPaint();
-                                    }
-                                }
-                            }
-                            MouseArea {
-                                id: prevArea
-                                objectName: "prevArea"
-                                anchors.fill: parent
-                                anchors.margins: -2
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    const p = root.player;
-                                    if (!p || p.canGoPrevious === false)
-                                        return;
-                                    if (p.previous)
-                                        p.previous();
-                                    else if (p.Previous)
-                                        p.Previous();
-                                }
-                            }
-                        }
-
-                        // Play/Pause Button
-                        Item {
-                            id: playBtn
-                            Layout.preferredWidth: 26
-                            Layout.preferredHeight: 22
-                            scale: playArea.pressed ? 0.94 : (playArea.containsMouse ? 1.06 : 1.0)
-                            Behavior on scale {
-                                NumberAnimation {
-                                    duration: 130
-                                    easing.type: Easing.OutCubic
-                                }
-                            }
-
-                            Canvas {
-                                id: playIcon
-                                anchors.centerIn: parent
-                                width: 12
-                                height: 12
-                                opacity: playArea.containsMouse ? 1.0 : 0.86
-                                onPaint: {
-                                    const ctx = getContext("2d");
-                                    ctx.reset();
-                                    ctx.fillStyle = root.controlColor;
-                                    if (root.isPlaying) {
-                                        // Draw two vertical pause bars
-                                        ctx.fillRect(2, 1, 3.5, 10);
-                                        ctx.fillRect(6.5, 1, 3.5, 10);
-                                    } else {
-                                        // Draw play triangle
-                                        ctx.beginPath();
-                                        ctx.moveTo(2.5, 1);
-                                        ctx.lineTo(10.5, 6);
-                                        ctx.lineTo(2.5, 11);
-                                        ctx.closePath();
-                                        ctx.fill();
-                                    }
-                                }
-                                Connections {
-                                    target: root
-                                    function onIsPlayingChanged() {
-                                        playIcon.requestPaint();
-                                    }
-                                    function onControlColorChanged() {
-                                        playIcon.requestPaint();
-                                    }
-                                }
-                            }
-                            MouseArea {
-                                id: playArea
-                                objectName: "playArea"
-                                anchors.fill: parent
-                                anchors.margins: -2
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    const p = root.player;
-                                    if (!p || p.canTogglePlaying === false)
-                                        return;
-                                    if (p.togglePlaying)
-                                        p.togglePlaying();
-                                    else if (p.playPause)
-                                        p.playPause();
-                                    else if (p.PlayPause)
-                                        p.PlayPause();
-                                    else if (root.isPlaying)
-                                        (p.pause || p.Pause || function () {})();
-                                    else
-                                        (p.play || p.Play || function () {})();
-                                }
-                            }
-                        }
-
-                        // Next Button
-                        Item {
-                            id: nextBtn
-                            Layout.preferredWidth: 22
-                            Layout.preferredHeight: 22
-                            scale: nextArea.pressed ? 0.94 : (nextArea.containsMouse ? 1.07 : 1.0)
-                            Behavior on scale {
-                                NumberAnimation {
-                                    duration: 130
-                                    easing.type: Easing.OutCubic
-                                }
-                            }
-
-                            Canvas {
-                                id: nextIcon
-                                anchors.centerIn: parent
-                                width: 12
-                                height: 12
-                                opacity: nextArea.containsMouse ? 1.0 : 0.78
-                                onPaint: {
-                                    const ctx = getContext("2d");
-                                    ctx.reset();
-                                    ctx.fillStyle = root.controlColor;
-                                    ctx.beginPath();
-                                    ctx.moveTo(2, 1.5);
-                                    ctx.lineTo(10.5, 6);
-                                    ctx.lineTo(2, 10.5);
-                                    ctx.closePath();
-                                    ctx.fill();
-                                }
-                                Connections {
-                                    target: root
-                                    function onControlColorChanged() {
-                                        nextIcon.requestPaint();
-                                    }
-                                }
-                            }
-                            MouseArea {
-                                id: nextArea
-                                objectName: "nextArea"
-                                anchors.fill: parent
-                                anchors.margins: -2
-                                hoverEnabled: true
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    const p = root.player;
-                                    if (!p || p.canGoNext === false)
-                                        return;
-                                    if (p.next)
-                                        p.next();
-                                    else if (p.Next)
-                                        p.Next();
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Smaller counter-spacer: with the top spacer ~2x this, the dock
-                // settles in the lower third rather than hard against the bottom.
-                Item {
-                    Layout.fillHeight: true
-                    Layout.preferredHeight: 1
-                    Layout.maximumHeight: 10
-                    visible: !artBox.visible
-                }
-            }
-
-            // ── Waveform + text ───────────────────────────────────────────────
-            ColumnLayout {
-                Layout.fillWidth: true
-                Layout.fillHeight: true
-                spacing: 0
-
-                Waveform {
-                    id: wave
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    Layout.maximumHeight: 44
-                    bars: root.visualizer.bars
-                    numBars: root.visualizer.numBars
-                    maxRange: root.visualizer.maxRange
-                    hasAudio: root.visualizer.hasAudio
-                    backendFailed: root.visualizer.backendFailed
-                    waveColor: root.waveColor
-                    textColor: root.textColor
-                    lineWidth: root.configuration.lineWidth
-                    fillWave: root.configuration.fillWave
-                    glowWave: root.configuration.glowWave
-                    visualizerType: root.configuration.visualizerType
-
-                    // Backend down: say what broke and what to type, instead of
-                    // drawing a flat line that looks exactly like silence.
-                    Column {
-                        anchors.centerIn: parent
-                        width: parent.width
-                        spacing: 0
-                        visible: root.visualizer.backendFailed
-
-                        Text {
-                            width: parent.width
-                            horizontalAlignment: Text.AlignHCenter
-                            elide: Text.ElideRight
-                            font.pixelSize: 10
-                            color: root.textColor
-                            opacity: 0.8
-                            text: root.visualizer.backendMessage
-                        }
-
-                        Text {
-                            width: parent.width
-                            horizontalAlignment: Text.AlignHCenter
-                            elide: Text.ElideMiddle
-                            // Monospace only when the line is literally a
-                            // command to type.
-                            font.family: root.visualizer.backendCode === "no-cava" ? "monospace" : root.defaultFontFamily
-                            font.pixelSize: 9
-                            color: root.textColor
-                            opacity: 0.55
-                            text: root.visualizer.backendAction
-                            visible: text !== ""
-                        }
-
-                        QQC.ToolTip.visible: hoverHandler.hovered
-                        QQC.ToolTip.text: root.visualizer.backendMessage + "\n" + root.visualizer.backendHint
-                        HoverHandler {
-                            id: hoverHandler
-                        }
-                    }
-                }
-
-                // ── Seekable progress pulse ──────────────────────────────────
-                Item {
-                    id: progressBar
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: progressBar.pbStyle === 4 ? 28 : 18
-                    Layout.topMargin: 1
-                    Layout.bottomMargin: 1
-
-                    // Visible only if we have a player and a valid track length
-                    visible: root.hasPlayer && lengthValue > 0
-                    opacity: visible ? 1.0 : 0.0
-
-                    readonly property int pbStyle: root.configuration.progressBarStyle ?? 0
-
-                    readonly property real lengthValue: positionClock.lengthValue
-                    readonly property real progress: positionClock.progress
-                    readonly property int progressPixel: Math.round(positionClock.progress * progressTrack.width)
-                    readonly property bool animateDecorations: root.isPlaying && root.visualizer.hasAudio && positionClock.active
-                    readonly property real sweep: {
-                        if (!animateDecorations)
-                            return -0.35;
-                        const phase = Math.min(1, (root.visualFrameTime % 1730) / 1450);
-                        return -0.35 + 1.7 * (0.5 - 0.5 * Math.cos(Math.PI * phase));
-                    }
-
-                    PlaybackClock {
-                        id: positionClock
-                        objectName: "positionClock"
-                        unitScale: root.positionUnitsPerSecond
-                        // Audio frames tick the clock while the waveform moves.
-                        // A slow fallback keeps silent playback/time labels correct.
-                        updateInterval: 1000
-                        player: root.player
-                        playing: root.isPlaying
-                        track: root.track
-                        active: progressBar.visible && progressBar.width > 0 && progressBar.height > 0 && root.visualizer.plasmoidVisible
-                    }
-
-                    Behavior on opacity {
-                        NumberAnimation {
-                            duration: 180
-                        }
-                    }
-
-                    // ── Style 4 — Android Waveform seekbar ───────────────────
-                    Canvas {
-                        id: waveformSeek
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.top: parent.top
-                        anchors.topMargin: 1
-                        height: parent.height - 10
-                        visible: progressBar.pbStyle === 4
-                        antialiasing: true
-                        renderStrategy: Canvas.Cooperative
-
-                        // seeded pseudo-random waveform heights, unique per track
-                        property var barHeights: []
-                        property int numBars: 0
-                        property string waveformKey: ""
-
-                        function buildWaveform() {
-                            const w = width;
-                            if (!visible || w <= 0)
-                                return;
-                            const gap = 2;
-                            const barW = 3;
-                            const n = Math.floor(w / (barW + gap));
-                            const key = root.track + "\u0000" + root.artist;
-                            if (n === numBars && barHeights.length === n && waveformKey === key)
-                                return;
-                            numBars = n;
-                            waveformKey = key;
-                            // hash track title for a stable seed
-                            let seed = 0;
-                            const s = root.track + root.artist;
-                            for (let c = 0; c < s.length; c++)
-                                seed = (seed * 31 + s.charCodeAt(c)) >>> 0;
-                            const heights = [];
-                            for (let i = 0; i < n; i++) {
-                                seed = (seed * 1664525 + 1013904223) >>> 0;
-                                const r = (seed >>> 16) / 65535;
-                                // shape: taper at edges, random in middle
-                                const pos = n > 1 ? i / (n - 1) : 0;
-                                const taper = Math.sin(pos * Math.PI);
-                                heights.push(0.15 + r * 0.85 * taper);
-                            }
-                            barHeights = heights;
-                            requestPaint();
-                        }
-
-                        Component.onCompleted: buildWaveform()
-                        onWidthChanged: buildWaveform()
-                        onHeightChanged: {
-                            if (visible)
-                                requestPaint();
-                        }
-                        onVisibleChanged: {
-                            if (visible) {
-                                buildWaveform();
-                                requestPaint();
-                            }
-                        }
-                        Connections {
-                            target: root
-                            function onTrackChanged() {
-                                waveformSeek.buildWaveform();
-                            }
-                            function onArtistChanged() {
-                                waveformSeek.buildWaveform();
-                            }
-                            function onWaveColorChanged() {
-                                if (waveformSeek.visible)
-                                    waveformSeek.requestPaint();
-                            }
-                            function onTextColorChanged() {
-                                if (waveformSeek.visible)
-                                    waveformSeek.requestPaint();
-                            }
-                            function onControlColorChanged() {
-                                if (waveformSeek.visible)
-                                    waveformSeek.requestPaint();
-                            }
-                        }
-                        // Repaint when the playhead reaches a new pixel, not on
-                        // every 50 ms position tick: bars only change colour as
-                        // the playhead passes them, and on a three-minute track
-                        // it moves under 2 px a second.
-                        readonly property int playheadPx: visible ? Math.round(progressBar.progress * width) : 0
-                        readonly property bool showPlayhead: visible && progressBar.progress > 0 && progressBar.progress < 1
-                        onPlayheadPxChanged: {
-                            if (visible)
-                                requestPaint();
-                        }
-                        onShowPlayheadChanged: {
-                            if (visible)
-                                requestPaint();
-                        }
-
-                        onPaint: {
-                            const ctx = getContext("2d");
-                            ctx.reset();
-                            if (barHeights.length === 0)
-                                return;
-                            const gap = 2;
-                            const barW = 3;
-                            const n = barHeights.length;
-                            const h = height;
-                            const playheadX = playheadPx;
-                            const playedColor = Qt.rgba(root.waveColor.r, root.waveColor.g, root.waveColor.b, 0.90);
-                            const unplayedColor = Qt.rgba(root.textColor.r, root.textColor.g, root.textColor.b, 0.25);
-
-                            for (let i = 0; i < n; i++) {
-                                const x = i * (barW + gap);
-                                const played = (x + barW / 2) < playheadX;
-                                const bh = played ? Math.max(2, barHeights[i] * h) : Math.max(2, barHeights[i] * h * 0.45);
-                                const y = (h - bh) / 2;
-
-                                ctx.fillStyle = played ? playedColor : unplayedColor;
-
-                                const r = barW / 2;
-                                ctx.beginPath();
-                                if (bh > r * 2) {
-                                    ctx.moveTo(x + r, y);
-                                    ctx.arc(x + r, y + r, r, Math.PI, 0);
-                                    ctx.lineTo(x + barW, y + bh - r);
-                                    ctx.arc(x + r, y + bh - r, r, 0, Math.PI);
-                                    ctx.closePath();
-                                } else {
-                                    ctx.arc(x + r, y + bh / 2, r, 0, Math.PI * 2);
-                                }
-                                ctx.fill();
-                            }
-
-                            // playhead line
-                            if (showPlayhead) {
-                                ctx.fillStyle = Qt.rgba(root.controlColor.r, root.controlColor.g, root.controlColor.b, 0.95);
-                                const phX = playheadX - 1;
-                                ctx.fillRect(phX, 0, 2, h);
-                            }
-                        }
-                    }
-
-                    Rectangle {
-                        id: progressTrack
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.top: parent.top
-                        anchors.topMargin: progressBar.pbStyle === 1 ? 4 : 2
-                        visible: progressBar.pbStyle !== 4
-                        height: progressBar.pbStyle === 1 ? 1 : progressBar.pbStyle === 2 ? (pbArea.containsMouse ? 6 : 4) : progressBar.pbStyle === 3 ? (pbArea.containsMouse ? 8 : 6) : (pbArea.containsMouse ? 5 : 3)
-                        radius: height / 2
-                        color: progressBar.pbStyle === 1 ? Qt.rgba(root.textColor.r, root.textColor.g, root.textColor.b, 0.06) : Qt.rgba(root.textColor.r, root.textColor.g, root.textColor.b, 0.12)
-                        border.color: Qt.rgba(1, 1, 1, 0.10)
-                        border.width: progressBar.pbStyle === 1 ? 0 : 1
-
-                        Behavior on height {
-                            NumberAnimation {
-                                duration: 150
-                            }
-                        }
-
-                        Item {
-                            id: progressFillClip
-                            anchors.left: parent.left
-                            anchors.top: parent.top
-                            anchors.bottom: parent.bottom
-                            // A subpixel playhead change does not need a new frame.
-                            width: progressBar.progressPixel
-                            clip: true
-                            // Style 0,2,3 — gradient fill
-                            Rectangle {
-                                anchors.fill: parent
-                                radius: progressTrack.radius
-                                visible: progressBar.pbStyle !== 1
-                                gradient: Gradient {
-                                    GradientStop {
-                                        position: 0.0
-                                        color: Qt.rgba(root.pgStartColor.r, root.pgStartColor.g, root.pgStartColor.b, 0.62)
-                                    }
-                                    GradientStop {
-                                        position: 0.65
-                                        color: Qt.rgba(root.pgStartColor.r, root.pgStartColor.g, root.pgStartColor.b, 0.95)
-                                    }
-                                    GradientStop {
-                                        position: 1.0
-                                        color: Qt.rgba(root.pgEndColor.r, root.pgEndColor.g, root.pgEndColor.b, 0.82)
-                                    }
-                                }
-                                layer.enabled: true
-                                layer.effect: MultiEffect {
-                                    shadowEnabled: true
-                                    shadowColor: root.pgStartColor
-                                    shadowOpacity: progressBar.pbStyle === 2 ? (root.isPlaying ? 0.65 : 0.35) : (root.isPlaying ? 0.38 : 0.18)
-                                    shadowBlur: progressBar.pbStyle === 2 ? 0.45 : 0.28
-                                }
-                            }
-
-                            // Style 1 — flat solid fill (Ultra Minimal)
-                            Rectangle {
-                                anchors.fill: parent
-                                radius: progressTrack.radius
-                                visible: progressBar.pbStyle === 1
-                                color: Qt.rgba(root.pgStartColor.r, root.pgStartColor.g, root.pgStartColor.b, 0.75)
-                            }
-
-                            Rectangle {
-                                width: Math.max(18, progressTrack.width * 0.22)
-                                height: parent.height
-                                radius: parent.height / 2
-                                x: (progressFillClip.width + width) * progressBar.sweep - width
-                                opacity: (root.isPlaying && progressBar.pbStyle !== 1 && progressBar.pbStyle !== 3) ? 0.72 : 0.0
-                                gradient: Gradient {
-                                    orientation: Gradient.Horizontal
-                                    GradientStop {
-                                        position: 0.0
-                                        color: Qt.rgba(root.controlColor.r, root.controlColor.g, root.controlColor.b, 0.0)
-                                    }
-                                    GradientStop {
-                                        position: 0.50
-                                        color: Qt.rgba(root.controlColor.r, root.controlColor.g, root.controlColor.b, 0.78)
-                                    }
-                                    GradientStop {
-                                        position: 1.0
-                                        color: Qt.rgba(root.controlColor.r, root.controlColor.g, root.controlColor.b, 0.0)
-                                    }
-                                }
-                                Behavior on opacity {
-                                    NumberAnimation {
-                                        duration: 180
-                                    }
-                                }
-                            }
-                        }
-
-                        Rectangle {
-                            width: progressBar.pbStyle === 2 ? (pbArea.containsMouse ? 10 : 8) : (pbArea.containsMouse ? 8 : 6)
-                            height: width
-                            radius: width / 2
-                            anchors.verticalCenter: parent.verticalCenter
-                            x: Math.max(0, Math.min(parent.width - width, progressBar.progressPixel - width / 2))
-                            color: Qt.rgba(root.controlColor.r, root.controlColor.g, root.controlColor.b, root.isPlaying ? 0.95 : 0.68)
-                            opacity: (progressBar.pbStyle !== 1 && progressBar.pbStyle !== 3 && progressBar.pbStyle !== 4 && progressBar.progress > 0) ? 1.0 : 0.0
-                            layer.enabled: progressBar.pbStyle !== 1 && progressBar.pbStyle !== 3
-                            layer.effect: MultiEffect {
-                                shadowEnabled: true
-                                shadowColor: root.pgStartColor
-                                shadowOpacity: progressBar.pbStyle === 2 ? (root.isPlaying ? 0.75 : 0.42) : (root.isPlaying ? 0.55 : 0.22)
-                                shadowBlur: progressBar.pbStyle === 2 ? 0.60 : 0.40
-                            }
-
-                            scale: progressBar.animateDecorations && (progressBar.pbStyle === 0 || progressBar.pbStyle === 2) ? 1.05 - 0.13 * Math.cos(2 * Math.PI * (root.visualFrameTime % 1400) / 1400) : 1
-                        }
-                    }
-
-                    Text {
-                        anchors.left: parent.left
-                        anchors.bottom: parent.bottom
-                        text: positionClock.elapsedText
-                        color: root.textColor
-                        opacity: 0.50
-                        font.pixelSize: 8
-                    }
-
-                    Text {
-                        anchors.right: parent.right
-                        anchors.bottom: parent.bottom
-                        text: positionClock.totalText
-                        color: root.textColor
-                        opacity: 0.50
-                        font.pixelSize: 8
-                    }
-
-                    MouseArea {
-                        id: pbArea
-                        objectName: "pbArea"
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-
-                        onClicked: mouse => {
-                            const p = root.player;
-                            if (!p || p.canSeek === false || p.positionSupported === false)
-                                return;
-                            const len = p.length || p.mprisLength || 0;
-                            if (!len)
-                                return;
-                            const ratio = progressTrack.width > 0 ? positionClock.clamp((mouse.x - progressTrack.x) / progressTrack.width, 0, 1) : 0;
-                            const newPos = ratio * len;
-                            positionClock.setPosition(newPos);
-
-                            // Robust seek implementation for different MPRIS layers
-                            if (typeof p.position !== "undefined" && p.canSeek !== false) {
-                                p.position = newPos;
-                            } else if (typeof p.SetPosition === "function") {
-                                p.SetPosition(newPos);
-                            } else if (typeof p.setPosition === "function") {
-                                p.setPosition(newPos);
-                            }
-                        }
-                    }
-                }
-
-                Text {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: implicitHeight
-                    text: root.trackUnknown ? "No track metadata" : root.displayTrack
-                    color: root.textColor
-                    opacity: root.trackUnknown ? 0.75 : 1
-                    font.bold: true
-                    font.italic: root.trackUnknown
-                    font.pixelSize: 11
-                    elide: Text.ElideRight
-
-                    // The raw value is the only clue when someone reports "it
-                    // shows nothing" — one hover away beats putting it on the card.
-                    HoverHandler {
-                        id: rawTrackHover
-                    }
-                    QQC.ToolTip.visible: rawTrackHover.hovered && root.trackUnknown && root.track !== ""
-                    QQC.ToolTip.text: root.track.length > 160 ? root.track.substring(0, 160) + "…" : root.track
-                }
-
-                Text {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: implicitHeight
-                    text: root.artist !== "" ? root.artist : root.sourceHint
-                    color: root.textColor
-                    opacity: 0.6
-                    font.pixelSize: 9
-                    font.italic: root.artist === "" && root.sourceHint !== ""
-                    elide: Text.ElideRight
-                }
-            }
+    }
+    Component {
+        id: mirroredLayout
+        Layouts.Classic {
+            view: root
+            mirrored: true
+        }
+    }
+    Component {
+        id: inlineLayout
+        Layouts.Inline {
+            view: root
+        }
+    }
+    Component {
+        id: heroLayout
+        Layouts.Hero {
+            view: root
+        }
+    }
+    Component {
+        id: stackedLayout
+        Layouts.Stacked {
+            view: root
+        }
+    }
+    Component {
+        id: posterLayout
+        Layouts.Poster {
+            view: root
+        }
+    }
+    Component {
+        id: pillLayout
+        Layouts.Pill {
+            view: root
+        }
+    }
+    Component {
+        id: pillIconLayout
+        Layouts.PillIcon {
+            view: root
+        }
+    }
+    Component {
+        id: lyricsLayout
+        Layouts.Lyrics {
+            view: root
+        }
+    }
+    Component {
+        id: orbitLayout
+        Layouts.Orbit {
+            view: root
+        }
+    }
+    Component {
+        id: stripLayout
+        Layouts.Strip {
+            view: root
         }
     }
 }

@@ -8,13 +8,13 @@
             }
         ],
         "Category": "Multimedia",
-        "Description": "Glassy audio visualizer with MPRIS track info and seekable progress, powered by cava.",
+        "Description": "Reactive audio visualizer with 16 visualizer styles, 28 built-in presets, a live settings studio, album artwork with glass/liquid card styling, synced lyrics, and MPRIS playback controls.",
         "Icon": "org.muddyblack.plasmaAudioVisualizer",
         "Id": "org.muddyblack.plasmaAudioVisualizer",
-        "License": "MIT",
+        "License": "GPL-3.0-or-later",
         "Name": "Plasma Audio Visualizer",
-        "Version": "2.1.7",
-        "Website": "https://github.com/muddyblack/plasma-audio-visualizer"
+        "Version": "3.0.0",
+        "Website": "https://github.com/Muddyblack/kde-audio-visualizer"
     },
     "X-Plasma-API-Minimum-Version": "6.0"
 }

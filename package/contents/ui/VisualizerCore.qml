@@ -12,6 +12,89 @@ Item {
     property real maxRange: 1000.0
     property var bars: Array(numBars).fill(0)
     property real frameTimeMs: 0
+    // Settled audible tones still drive decorative motion. Keep the original
+    // clock suppression for default styles and for settled silence.
+    readonly property bool motionClockRequired: {
+        const style = configuration.visualizerType ?? 0;
+        return style === 6 || (!(configuration.reducedMotion ?? false) && ([9, 10, 11, 13, 14, 15].includes(style) || configuration.vizColorMode === "rainbow" || (configuration.hueReactive ?? false)));
+    }
+    // Normalized source energy, before display smoothing, mirroring or taper.
+    readonly property real bass: analysis.bass
+    readonly property real mid: analysis.mid
+    readonly property real high: analysis.high
+    readonly property real bassSmoothed: analysis.bassSmoothed
+    // One accepted sample pulse; the first sample after a reset only primes it.
+    readonly property bool attack: analysis.attack
+
+    QtObject {
+        id: analysis
+        property real bass: 0
+        property real mid: 0
+        property real high: 0
+        property real bassSmoothed: 0
+        property bool attack: false
+        property bool initialized: false
+        property real lastSampleMs: 0
+        property real lastAttackMs: -1
+        property int generation: 0
+    }
+
+    function resetAnalysis() {
+        analysis.generation++;
+        analysis.bass = 0;
+        analysis.mid = 0;
+        analysis.high = 0;
+        analysis.bassSmoothed = 0;
+        analysis.attack = false;
+        analysis.initialized = false;
+        analysis.lastSampleMs = 0;
+        analysis.lastAttackMs = -1;
+    }
+
+    // Fractional bins keep the 20/40/40 split meaningful with odd or tiny frames.
+    // Each source bar is visited once, apart from the two shared boundary bins.
+    function bandMean(parts, start, end) {
+        let sum = 0;
+        for (let i = Math.floor(start); i < Math.ceil(end); i++)
+            sum += parts[i] * (Math.min(i + 1, end) - Math.max(i, start));
+        return maxRange > 0 ? Math.max(0, Math.min(1, sum / (end - start) / maxRange)) : 0;
+    }
+
+    function analyzeFrame(parts, now) {
+        const bassEnd = parts.length * 0.2;
+        const midEnd = parts.length * 0.6;
+        const nextBass = bandMean(parts, 0, bassEnd);
+        const nextMid = bandMean(parts, bassEnd, midEnd);
+        const nextHigh = bandMean(parts, midEnd, parts.length);
+        // Treat a wall-clock correction like a new capture. A backwards jump
+        // must not leave beat detection locked out until the old time returns.
+        const primed = analysis.initialized && now >= analysis.lastSampleMs;
+        let smoothed = nextBass;
+        let onset = false;
+        if (primed) {
+            // Evolve the envelope over the time the previous sample was held.
+            // This works at every configured frame rate and across duplicate
+            // frames, whose INI timestamps are only whole-second heartbeats.
+            const decay = Math.exp(-(now - analysis.lastSampleMs) / 150);
+            smoothed = analysis.bass + (analysis.bassSmoothed - analysis.bass) * decay;
+            if (Math.abs(smoothed - analysis.bass) <= 0.0005)
+                smoothed = analysis.bass;
+            const above = nextBass - smoothed > 0.12;
+            const wasAbove = analysis.bass - smoothed > 0.12;
+            onset = above && !wasAbove && (analysis.lastAttackMs < 0 || now - analysis.lastAttackMs >= 180);
+        } else {
+            analysis.lastAttackMs = -1;
+        }
+        if (onset)
+            analysis.lastAttackMs = now;
+        analysis.initialized = true;
+        analysis.lastSampleMs = now;
+        analysis.bass = nextBass;
+        analysis.mid = nextMid;
+        analysis.high = nextHigh;
+        analysis.bassSmoothed = smoothed;
+        analysis.attack = onset;
+    }
     // Audio capture is independent of MPRIS: browsers and other apps can emit
     // sound without the selected media player reporting playback.
     property bool active: true
@@ -306,15 +389,21 @@ Item {
 
     CommandSource {
         id: legacyReader
+        property int analysisGeneration: 0
         sourceComponent: vis.commandSourceComponent
         onNewData: function (source, data) {
             disconnectSource(source);
+            // A slow read from before hiding/restarting capture is obsolete.
+            if (analysisGeneration !== analysis.generation)
+                return;
             if (!vis.handleData((data["stdout"] || "").trim()))
                 vis.updatePollingCadence(true);
         }
         function read() {
-            if (vis.resolvedBarsPath && connectedSources.length === 0)
+            if (vis.resolvedBarsPath && connectedSources.length === 0) {
+                analysisGeneration = analysis.generation;
                 connectSource("cat " + vis.shellQuote(vis.resolvedBarsPath));
+            }
         }
     }
 
@@ -344,7 +433,9 @@ Item {
         }
     }
 
-    readonly property int pollInterval: Math.round(1000 / vis.configuration.framerate)
+    // Battery saver (set by the host while on battery): draw at most 20 Hz.
+    property bool batterySaverActive: false
+    readonly property int pollInterval: Math.round(1000 / (batterySaverActive ? Math.min(20, vis.configuration.framerate) : vis.configuration.framerate))
 
     // Exponential moving average toward each new cava frame. Cava already
     // smooths over time, but reading a fresh frame every poll still snaps
@@ -375,7 +466,7 @@ Item {
     // Accept both the INI string list and the original semicolon transport.
     // Empty or malformed reads keep the previous frame and return false. Bars
     // that have settled are not reassigned, so silence emits no barsChanged.
-    function handleData(frame) {
+    function handleData(frame, timestampMs = Date.now()) {
         if (!frame)
             return false;
         const rawParts = typeof frame === "string" ? frame.replace(/^v=/, "").split(/[;,]/) : frame;
@@ -391,6 +482,9 @@ Item {
         }
         if (!parts.length)
             return false;
+        // Publish analysis before bars/frameTimeMs notify rendering consumers.
+        // Invalid frames return above without changing either kind of state.
+        analyzeFrame(parts, timestampMs);
         const count = numBars;
         const prev = bars;
         const out = new Array(count);
@@ -408,10 +502,10 @@ Item {
             changed = changed || next !== p;
         }
         updatePollingCadence(isQuiet);
-        if (changed) {
+        if (changed)
             bars = out;
-            frameTimeMs = Date.now();
-        }
+        if (changed || (!isQuiet && motionClockRequired))
+            frameTimeMs = timestampMs;
         return true;
     }
 
@@ -426,6 +520,7 @@ Item {
     }
 
     onActiveChanged: {
+        resetAnalysis();
         if (active) {
             idleCounter = 0;
             pollTimer.interval = pollInterval;
@@ -440,6 +535,7 @@ Item {
     }
 
     onPlasmoidVisibleChanged: {
+        resetAnalysis();
         if (plasmoidVisible) {
             idleCounter = 0;
             pollTimer.interval = pollInterval;
@@ -447,6 +543,7 @@ Item {
     }
 
     onBackendFailedChanged: {
+        resetAnalysis();
         if (!backendFailed) {
             idleCounter = 0;
             pollTimer.interval = pollInterval;
@@ -472,6 +569,7 @@ Item {
 
     function restart() {
         configurationRestart.stop();
+        resetAnalysis();
         if (stopWhenInactive && !active) {
             feederLauncher.killFeeder();
             return;

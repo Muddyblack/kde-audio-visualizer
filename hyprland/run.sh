@@ -7,6 +7,11 @@ CONFIG="$SCRIPT_DIR/../shell.qml"
 export QT_QPA_PLATFORMTHEME=generic
 export QT_QUICK_CONTROLS_STYLE=Basic
 
+# Waybar custom module: JSON lines on every player change.
+if [[ ${1-} == --waybar ]]; then
+  exec bash "$SCRIPT_DIR/waybar.sh"
+fi
+
 # IPC commands address an existing instance and must not own its lifetime.
 if (($#)); then
   exec qs -p "$CONFIG" "$@"

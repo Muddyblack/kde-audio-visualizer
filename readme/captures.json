@@ -1,0 +1,46 @@
+{
+  "backend": "software",
+  "scale": 2,
+  "images": {
+    "sheet-cards": [
+      1696,
+      808
+    ],
+    "sheet-surfaces": [
+      1696,
+      808
+    ],
+    "sheet-stacked": [
+      1536,
+      1192
+    ],
+    "sheet-posters": [
+      1696,
+      944
+    ],
+    "sheet-orbits": [
+      1776,
+      1720
+    ],
+    "sheet-minimal": [
+      2096,
+      944
+    ],
+    "sheet-panels": [
+      2656,
+      632
+    ],
+    "classic": [
+      816,
+      304
+    ],
+    "liquid": [
+      736,
+      496
+    ],
+    "studio": [
+      2200,
+      1520
+    ]
+  }
+}

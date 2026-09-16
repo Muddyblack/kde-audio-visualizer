@@ -29,10 +29,29 @@ TestCase {
     }
     property var subject: null
     property int updates: 0
+    property int bandUpdates: 0
+    property int attacks: 0
     Connections {
         target: subject
         function onBarsChanged() {
             updates++;
+        }
+        function onBassChanged() {
+            bandUpdates++;
+        }
+        function onMidChanged() {
+            bandUpdates++;
+        }
+        function onHighChanged() {
+            bandUpdates++;
+        }
+        function onBassSmoothedChanged() {
+            bandUpdates++;
+        }
+        function onAttackChanged() {
+            bandUpdates++;
+            if (subject.attack)
+                attacks++;
         }
     }
 
@@ -44,6 +63,8 @@ TestCase {
         subject = createTemporaryObject(visualizer, this);
         verify(subject !== null);
         updates = 0;
+        bandUpdates = 0;
+        attacks = 0;
     }
 
     function test_legacyAndIniFrames() {
@@ -60,19 +81,29 @@ TestCase {
     }
 
     function test_silenceSettlesAndAudioWakes() {
-        subject.handleData("900;900;900;900;");
+        const started = Date.now();
+        subject.handleData("900;900;900;900;", started);
         verify(subject.hasAudio);
         for (let i = 0; i < 200; i++)
-            subject.handleData("0;1;2;0;");
+            subject.handleData("0;1;2;0;", started + (i + 1) * 17);
         verify(!subject.hasAudio);
         compare(subject.bars, [0, 0, 0, 0]);
+        compare(subject.bass, 0);
+        compare(subject.mid, 0);
+        compare(subject.high, 0);
+        compare(subject.bassSmoothed, 0);
+        verify(!subject.attack);
         const settled = updates;
+        const settledBands = bandUpdates;
         for (let i = 0; i < 20; i++)
-            subject.handleData("0;0;0;0;");
+            subject.handleData("0;0;0;0;", started + (i + 201) * 17);
         compare(updates, settled, "Silent polls must not repaint the wave");
-        subject.handleData("900;900;900;900;");
+        compare(bandUpdates, settledBands, "Silent polls must not animate band consumers");
+        subject.handleData("900;900;900;900;", started + 221 * 17);
         verify(subject.hasAudio, "Audio must wake the wave without a media player");
         verify(updates > settled);
+        verify(subject.bass > 0 && subject.mid > 0 && subject.high > 0, "Audio must wake every band consumer");
+        verify(bandUpdates > settledBands);
     }
 
     function test_repeatedFramesSmoothThenSettle() {
@@ -89,6 +120,11 @@ TestCase {
             subject.handleData(frame);
         compare(updates, settled, "Settled frames must not emit barsChanged");
         subject.restart();
+        compare(subject.bass, 0, "Restart must clear the previous bass energy");
+        compare(subject.mid, 0);
+        compare(subject.high, 0);
+        compare(subject.bassSmoothed, 0, "Restart must clear the onset baseline");
+        verify(!subject.attack);
         subject.handleData(frame);
         compare(subject.bars, [495, 495, 495, 495], "Restart must smooth from zero again");
     }
@@ -154,14 +190,32 @@ TestCase {
         subject.resolvedRunDir = runtimeDir + "/audio-wave-widget";
         let sawLow = false;
         let sawHigh = false;
+        let sawLowBars = false;
+        let sawHighBars = false;
+        const calls = Support.Commands.calls.length;
         for (let i = 0; i < 90; i++) {
             subject.readBars();
-            sawLow = sawLow || subject.bars[0] < 200;
-            sawHigh = sawHigh || subject.bars[0] > 700;
+            // The synthetic cava sends the same 100/900 value to every bar.
+            // All three frequency bands must track that shared frame.
+            for (const name of ["bass", "mid", "high"]) {
+                verify(isFinite(subject[name]) && subject[name] >= 0 && subject[name] <= 1, name + " must stay normalized");
+                fuzzyCompare(subject[name], subject.bass, 1e-6, name + " must share the uniform source energy");
+            }
+            const low = Math.abs(subject.bass - 0.1) < 1e-6;
+            const high = Math.abs(subject.bass - 0.9) < 1e-6;
+            if (subject.hasAudio)
+                verify(low || high, "Band energy must preserve the normalized 100/900 source values before visual smoothing");
+            sawLow = sawLow || low;
+            sawHigh = sawHigh || high;
+            sawLowBars = sawLowBars || subject.bars[0] < 200;
+            sawHighBars = sawHighBars || subject.bars[0] > 700;
             wait(20);
         }
-        verify(sawLow && sawHigh, "Must follow changing external frames");
+        verify(sawLow && sawHigh, "Bands must follow changing external frames");
+        verify(sawLowBars && sawHighBars, "Rendered bars must follow changing external frames");
+        verify(attacks > 0, "Live bass transitions must produce attacks");
         verify(subject.hasAudio);
+        compare(Support.Commands.calls.length, calls, "Frame and band updates must not launch processes");
         verify(!Support.Commands.calls.some(value => value.startsWith("cat ")), "Current feeder must use in-process reads");
         subject.readStatus();
         compare(subject.backendState, "ok");

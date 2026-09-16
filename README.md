@@ -9,7 +9,7 @@
     <img src="https://img.shields.io/badge/KDE_Store-Download-1d99f3?style=for-the-badge&logo=kde&logoColor=white" alt="KDE Store Download" />
   </a>
   <img src="https://img.shields.io/badge/KDE_Plasma-6.0%2B-1d99f3?style=for-the-badge&logo=kde&logoColor=white" alt="KDE Plasma 6.0+" />
-  <img src="https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge" alt="License: MIT" />
+  <img src="https://img.shields.io/badge/License-GPL--3.0-blue?style=for-the-badge" alt="License: GPL-3.0" />
   <a href="https://www.opendesktop.org/p/2359422/">
     <img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fapi.pling.com%2Focs%2Fv1%2Fcontent%2Fdata%3Fsearch%3Daudio%2Bwave%2Bvisualizer%26format%3Djson&query=%24.data%5B0%5D.downloads&label=Downloads&style=for-the-badge&color=1d99f3&logo=kde&logoColor=white" alt="KDE Store Downloads" />
   </a>
@@ -19,7 +19,7 @@
 </p>
 
 <p align="center">
-  <img src="./readme/demo.svg?v=1.1.3" alt="Widget demo" width="680"/>
+  <img src="./readme/demo.svg" alt="Widget demo" width="680"/>
 </p>
 
 <p align="center">
@@ -28,70 +28,67 @@
   <a href="#requirements">Requirements</a> ·
   <a href="#install">Install</a> ·
   <a href="#configuration">Configuration</a> ·
-  <a href="#how-it-works">How it works</a>
+  <a href="#how-it-works">How it works</a> ·
+  <a href="#credits--inspiration">Credits & Inspiration</a>
 </p>
 
 ---
 
-A glassy audio visualizer plasmoid for KDE Plasma 6. Renders a mirrored waveform that reacts to whatever is playing system-wide (via [cava]), alongside MPRIS track metadata, album art, transport controls, and a seekable progress bar.
+An audio visualizer for KDE Plasma 6 and Hyprland/Quickshell. Reacts to system-wide
+audio through [cava], with album artwork, MPRIS playback controls and a live
+settings studio for building your own look.
 
 <p align="center">
-  <img src="./readme/preview.png" alt="Preview" width="680"/>
+  <img src="./readme/liquid.png" alt="Preview" width="368"/>
 </p>
 
 ## Features
 
-- **6 visualizer styles** — Smooth Wave, Rounded Bars, Mirror Bars, Tech Line, Floating Dots, Floating Dots Bold
-- **5 progress bar styles** — Glassy Sleek, Ultra Minimal, Glowing Pulse, Bold Pill, Waveform
-- System-wide reactive waveform (PipeWire via cava — not tied to any single player)
-- Smooth frame interpolation so the waveform glides instead of snapping
-- MPRIS2 track info: title, artist, album art
-- Transport controls (prev / play-pause / next) with customizable color
-- Seekable progress bar with elapsed/total time
-- Honors the active Plasma accent color (or set a custom color)
-- Optional waveform fill + neon glow effect
-- **Album art as background** — use the current cover as a blurred backdrop with independent Blur and Darkness sliders; the redundant thumbnail hides automatically
-- Optional background card with configurable color, opacity (via alpha), and corner radius
-- Custom text and controls colors
-- Customizable dock background color (supports alpha via color picker)
-- No panel background — sits cleanly on any panel
+**Visuals** — 16 visualizers from smooth waves and bars to ribbons, particles and
+Pulse Orb; 6 palettes with reactive hues, glow and bloom; system, custom or
+cover-driven accents.
+
+**Layouts** — Classic, mirrored, inline, hero, stacked, strip, poster and Orbit
+cards, plus panel pills/icons. Album-cover backgrounds, glass/liquid styling,
+card shadows, artwork effects and perspective tilt with stationary controls,
+and a separate cover lightbox.
+
+**Presets & studio** — 28 built-in presets plus a live studio with search,
+visual pickers and your own saved looks. Export a look as JSON from the HTML
+demo and import it into the widget, or go the other way.
+
+**Playback** — Play/pause, skip, seeking, supported shuffle/repeat and player
+switching. Optional album/details and scrolling titles. Opt-in synced lyrics,
+including a **Lyrics only** layout: readable, wrapped verses with the current
+line highlighted. Scroll to read ahead, then choose **Follow current line** to
+resume. Find it under **Lyrics → Lyrics only**, **Layout**, or **Presets**; it
+uses online lyrics from LRCLIB.
+
+**Efficiency** — Reduced motion, battery saver, idle/paused states and
+hidden-widget audio suspension. Shared QML components across Plasma and
+Quickshell, with shader and software renderers.
+
+Two current limits: glass/liquid styling does not yet sample or refract the
+desktop behind the widget, and the Orbit shaders are still pending a desktop
+visual/power pass.
 
 ## Gallery
 
-<details open>
-  <summary><b>Smooth Wave / Lines</b></summary>
-  <br/>
-  <img src="./readme/lines.png" alt="Line-style visualizer" width="680"/>
-</details>
+Real QML screenshots with sample playback and the original 1024px widget icon.
+Presets are rendered side by side into one capture per family at 2× resolution —
+no rescaling, no collage afterwards. These captures use Qt’s software renderer;
+GPU-only blur, reflection and shader effects require an OpenGL capture.
 
-<details>
-  <summary><b>Bars</b></summary>
-  <br/>
-  <img src="./readme/bars.png" alt="Bar-style visualizer" width="680"/>
-</details>
+<img src="readme/sheet-cards.png" width="760" alt="Classic, Glass Classic, Cover Art and Neon Night">
 
-<details>
-  <summary><b>Dotted</b></summary>
-  <br/>
-  <img src="./readme/dotted.png" alt="Floating-dots visualizer" width="680"/>
-</details>
+<img src="readme/sheet-orbits.png" width="600" alt="Orbit, Halo, Sunburst and Lyrics only">
 
-<details>
-  <summary><b>Album art as background</b></summary>
-  <br/>
-  Turn the current track's cover into a blurred backdrop. The album-art thumbnail
-  hides automatically (it'd be redundant), and the <b>Blur</b> and <b>Darkness</b>
-  sliders dial the look from a crisp bold cover to a subtle frosted tint — all
-  while keeping the waveform and text readable.
-  <br/><br/>
-  <img src="./readme/art_as_background.png" alt="Album art as background" width="680"/>
-</details>
+[Browse all 28 presets](docs/gallery.md) across seven sheets. Rebuild the gallery
+and that page with `make gallery`.
 
-<details>
-  <summary><b>Settings</b></summary>
-  <br/>
-  <img src="./readme/settings.png" alt="Configuration dialog" width="680"/>
-</details>
+To try the HTML demo locally, run `make docs`, then open `docs/website/index.html`.
+The demo shares wallpapers, theme/catalogue data and preset exchange code with
+QML; it has a separate browser renderer and uses sample playback.
 
 ## Requirements
 
@@ -107,8 +104,8 @@ A glassy audio visualizer plasmoid for KDE Plasma 6. Renders a mirrored waveform
 ### Hyprland / Caelestia (Quickshell)
 
 Run the standalone desktop widget alongside Caelestia. Both frontends render
-the same `VisualizerView.qml`: the original Plasma layout, glass transport dock,
-album-art background effects, six waveform styles, and five seekbar styles.
+the same `VisualizerView.qml`, layouts, artwork, transport controls,
+16 visualizer styles and 11 progress styles.
 Requires `qs` (Quickshell), `cava`,
 and the shell utilities listed above; KDE Plasma is not required.
 
@@ -173,7 +170,7 @@ The default size is Plasma's 360 × 104; change `widgetWidth` / `widgetHeight`
 as needed. Matching size, settings, colors, font and icon theme gives the same
 appearance. Plasma supplies its theme through Kirigami; Quickshell uses the
 configured colors and the session's font/icon theme, without requiring Kirigami.
-The Plasma configuration dialog remains specific to Plasma.
+Both hosts use the same settings studio inside their own configuration windows.
 
 For declarative defaults, set `AUDIO_WAVE_DEFAULTS` to a JSON file with the same
 keys as the settings above, plus `monitor` (`"all"`, `""`, or an output name),
@@ -212,11 +209,11 @@ The shared waveform uses one GPU glow effect instead of blurring each bar on
 the CPU. Progress decorations follow audio updates instead of running a separate
 continuous animation. Software rendering omits the unsupported GPU glow.
 For a repeatable CPU comparison against a saved older package, run
-`python3 tests/benchmark_rendering.py --baseline /path/to/older/package`.
-`python3 tests/benchmark_frames.py` measures the current view's frame submissions.
+`python3 tools/benchmark_rendering.py --baseline /path/to/older/package`.
+`python3 tools/benchmark_frames.py` measures the current view's frame submissions.
 These offscreen benchmarks measure CPU drawing and frame submissions, not GPU
 cost or system power; compare actual watts in your desktop session.
-`python3 tests/measure_power.py` reads live package power, GPU clocks and capture
+`python3 tools/measure_power.py` reads live package power, GPU clocks and capture
 status without root. Compare the same music and visible displays, with other
 work kept steady. Hardware domains overlap, so their watt readings must not be
 added together. Turning off waveform glow alone does not necessarily reduce
@@ -285,26 +282,40 @@ kpackagetool6 -t Plasma/Applet -r org.muddyblack.plasmaAudioVisualizer
 
 ## Configuration
 
-All settings are available via the widget's right-click → Configure menu:
+Open the widget's settings (right-click in Quickshell). The studio previews your
+changes while you edit; **Apply/OK** commits them and **Cancel** discards them.
+The charcoal interface uses Midnight Marina accents; widget colours are independent.
 
-| Setting | Description |
+<img src="readme/studio.png" width="760" alt="Settings studio">
+
+| Tab | Settings |
 |---|---|
-| **Visualizer Style** | Smooth Wave / Rounded Bars / Mirror Bars / Tech Line / Floating Dots / Floating Dots Bold |
-| **Progress Bar Style** | Glassy Sleek / Ultra Minimal / Glowing Pulse / Bold Pill / Waveform |
-| **Number of Bars** | How many frequency bars cava outputs (8–128) |
-| **Framerate** | Target refresh rate in Hz |
-| **Sensitivity** | Cava amplitude multiplier |
-| **Smoothing** | Noise reduction factor (0–1) |
-| **Audio Input** | Auto-detect, or pin cava to PipeWire / PulseAudio / ALSA |
-| **Wave Color** | System accent or custom color |
-| **Wave Glow** | Neon glow shadow on the waveform |
-| **Fill Wave** | Transparent gradient fill under the waveform |
-| **Line Width** | Stroke width for line-based visualizers |
-| **Text / Controls / Dock Colors** | Each independently customizable |
-| **Background Card** | Optional frosted card with custom color+alpha and corner radius |
-| **Art Background** | Use the album cover as a blurred card background |
-| **Art Blur / Art Darkness** | Independent sliders to tune how blurred and how dark the art background is |
-| **Show MPRIS info** | Toggle album art, track title, artist, and controls |
+| Presets / My presets | Built-in looks, saved looks, JSON sharing, Keep my colours |
+| Visualizer | Style, line weight, fill and style-specific controls |
+| Controls | Progress, time labels, transport buttons and dock |
+| Layout | Card/panel layout, sizing and text alignment |
+| Artwork | Shape, scale, border, tilt, reflection and click action |
+| Track info | Album, player, marquee and details |
+| Lyrics | Line on card or lyrics-only mode; font, weight, spacing, alignment, colours, contrast, card size, reading position, following and timing offset |
+| Card | Material, background, radius and depth |
+| Colours | Accent sources, palettes, bloom, hue and text/control colours |
+| Behaviour | Idle/paused states, reduced motion, battery saver; Hyprland placement |
+| Audio | Input, bars, sensitivity, frame rate, smoothing and diagnostics |
+
+### Share a look
+
+1. In **My presets**, use **Copy as JSON** (HTML: **Copy current as JSON**).
+2. In the other interface, choose **Import JSON** and paste it.
+3. In QML, select the imported tile, then press **Apply** or **OK**.
+
+Switch off **Keep my colours** to import the preset's colours as well. Placement
+and your saved preset library stay local. The **Copy config** button in HTML
+exports a different format; use the JSON preset buttons for sharing.
+
+The preview's **Fit** shrinks large cards but does not enlarge beyond 1×; **2×**
+is available explicitly. Plasma retains the outer widget rectangle while the
+card scales proportionally inside it. Hyprland follows layout sizes while its
+width/height remain at their defaults.
 
 ## Troubleshooting
 
@@ -344,6 +355,17 @@ For a detailed explanation of the architecture and data flow, see the [Architect
 
 In short: a small shell helper (`feeder.sh`) runs `cava` in the background and writes each changed frame to `$XDG_RUNTIME_DIR/audio-wave-widget/`. The QML side reads it in-process at the configured frame rate, drops to 2 FPS after a few seconds of silence, and stops polling while the widget is hidden.
 
-The waveform is drawn by a single fragment shader (`package/contents/shaders/visualizer.frag`), so a frame costs no CPU rasterisation; software-rendered sessions fall back to the Canvas renderer. After editing the shader, run `make shaders`.
+Waveforms and Orbit rings use bounded fragment-shader families on supported
+scene graphs, with Canvas fallbacks for software sessions. Particle state advances
+on the audio clock. Software covers use a static crop/mask fallback. After editing
+a shader, run `make shaders`.
 
 Regression tests (synthetic audio, no desktop or sound server needed): `nix develop --command python3 tests/run.py`.
+
+## Credits & Inspiration
+
+Special thanks to the following projects and creators that inspired features, visual ideas, and technical foundations for this widget:
+
+- **[lumaribbon](https://github.com/Lucenx9/lumaribbon)** by [Lucenx9](https://github.com/Lucenx9) — Inspired the silk-ribbon visualizer behavior (bass-driven thickness, mids curvature, highs filaments, attack ripples, and silence fade), curated color palettes (Aurora, Ember, Ice, Grove, Iris, Coral), music-reactive hue drift, bloom effects, reduced motion / simple-render options, and live preview studio concepts.
+- **[cava](https://github.com/karlstav/cava)** by [karlstav](https://github.com/karlstav) — The fast, lightweight audio bar generator and FFT backend powering the visualizer.
+- **[LRCLIB](https://lrclib.net/)** — Synced lyrics database service powering the opt-in lyrics display.

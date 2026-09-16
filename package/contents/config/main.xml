@@ -92,5 +92,289 @@
         <entry name="artBgKeepThumb" type="Bool">
             <default>false</default>
         </entry>
+
+        <!-- Redesign options remain inactive until their feature is enabled. -->
+        <entry name="layoutMode" type="String">
+            <default>classic</default>
+        </entry>
+        <entry name="autoPillInPanel" type="Bool">
+            <default>true</default>
+        </entry>
+        <entry name="pillContent" type="String">
+            <default>title-artist</default>
+        </entry>
+        <entry name="pillArt" type="Bool">
+            <default>true</default>
+        </entry>
+        <entry name="pillEq" type="String">
+            <default>static</default>
+        </entry>
+        <entry name="pillProgress" type="String">
+            <default>off</default>
+        </entry>
+        <entry name="pillControls" type="String">
+            <default>none</default>
+        </entry>
+        <entry name="pillMaxWidth" type="Int">
+            <default>300</default>
+        </entry>
+        <entry name="pillClick" type="String">
+            <default>popup</default>
+        </entry>
+        <entry name="posterAlign" type="String">
+            <default>left</default>
+        </entry>
+        <entry name="posterLines" type="Int">
+            <default>1</default>
+        </entry>
+        <entry name="posterVizBehind" type="Bool">
+            <default>true</default>
+        </entry>
+        <entry name="posterVizOpacity" type="Double">
+            <default>0.35</default>
+        </entry>
+        <entry name="posterClock" type="Bool">
+            <default>true</default>
+        </entry>
+        <entry name="orbitStyle" type="String">
+            <default>bars</default>
+        </entry>
+        <entry name="orbitReach" type="Double">
+            <default>1.0</default>
+        </entry>
+        <entry name="orbitRotate" type="Bool">
+            <default>true</default>
+        </entry>
+        <entry name="orbitCoverPulse" type="Bool">
+            <default>true</default>
+        </entry>
+        <entry name="vizDirection" type="String">
+            <default>up</default>
+        </entry>
+        <entry name="vizColorMode" type="String">
+            <default>solid</default>
+        </entry>
+        <entry name="vizPalette" type="String">
+            <default>aurora</default>
+        </entry>
+        <entry name="hueReactive" type="Bool">
+            <default>false</default>
+        </entry>
+        <entry name="bloom" type="Double">
+            <default>1.0</default>
+        </entry>
+        <entry name="ribbonCurvature" type="Double">
+            <default>1.0</default>
+        </entry>
+        <entry name="ribbonFullness" type="Double">
+            <default>1.0</default>
+        </entry>
+        <entry name="surfaceStyle" type="String">
+            <default>color</default>
+        </entry>
+        <entry name="glassBlur" type="Double">
+            <default>0.85</default>
+        </entry>
+        <entry name="glassTint" type="String">
+            <default>clear</default>
+        </entry>
+        <entry name="glassRefraction" type="Double">
+            <default>0.45</default>
+        </entry>
+        <entry name="glassSpecular" type="Bool">
+            <default>true</default>
+        </entry>
+        <entry name="cardShadow" type="String">
+            <default>none</default>
+        </entry>
+        <entry name="edgeHighlight" type="Bool">
+            <default>false</default>
+        </entry>
+        <entry name="grain" type="Bool">
+            <default>false</default>
+        </entry>
+        <entry name="bassPulse" type="Bool">
+            <default>false</default>
+        </entry>
+        <entry name="artShape" type="String">
+            <default>rounded</default>
+        </entry>
+        <entry name="artScale" type="Int">
+            <default>100</default>
+        </entry>
+        <entry name="artBorder" type="String">
+            <default>subtle</default>
+        </entry>
+        <entry name="artGlow" type="Bool">
+            <default>false</default>
+        </entry>
+        <entry name="artTilt" type="Bool">
+            <default>false</default>
+        </entry>
+        <entry name="artReflect" type="Bool">
+            <default>false</default>
+        </entry>
+        <entry name="artGrayPaused" type="Bool">
+            <default>false</default>
+        </entry>
+        <entry name="artFallback" type="String">
+            <default>icon</default>
+        </entry>
+        <entry name="artClick" type="String">
+            <default>none</default>
+        </entry>
+        <entry name="accentFromArt" type="Bool">
+            <default>false</default>
+        </entry>
+        <entry name="autoContrast" type="Bool">
+            <default>true</default>
+        </entry>
+        <entry name="dockStyle" type="String">
+            <default>glass</default>
+        </entry>
+        <entry name="showSkipButtons" type="Bool">
+            <default>true</default>
+        </entry>
+        <entry name="showShuffleRepeat" type="Bool">
+            <default>false</default>
+        </entry>
+        <entry name="showTimes" type="Bool">
+            <default>true</default>
+        </entry>
+        <entry name="timeFormat" type="String">
+            <default>total</default>
+        </entry>
+        <entry name="titleSize" type="Int">
+            <default>11</default>
+        </entry>
+        <entry name="textAlign" type="String">
+            <default>left</default>
+        </entry>
+        <entry name="showAlbum" type="Bool">
+            <default>false</default>
+        </entry>
+        <entry name="showSource" type="Bool">
+            <default>false</default>
+        </entry>
+        <entry name="showPlayerSwitch" type="Bool">
+            <default>false</default>
+        </entry>
+        <entry name="marquee" type="Bool">
+            <default>false</default>
+        </entry>
+        <entry name="showLyrics" type="Bool">
+            <default>false</default>
+        </entry>
+        <entry name="lyricsFontFamily" type="String">
+            <default></default>
+        </entry>
+        <entry name="lyricsInlineFontSize" type="Int">
+            <default>13</default>
+        </entry>
+        <entry name="lyricsFontSize" type="Int">
+            <default>22</default>
+        </entry>
+        <entry name="lyricsFontWeight" type="Int">
+            <default>400</default>
+        </entry>
+        <entry name="lyricsCurrentWeight" type="Int">
+            <default>600</default>
+        </entry>
+        <entry name="lyricsItalic" type="Bool">
+            <default>false</default>
+        </entry>
+        <entry name="lyricsLetterSpacing" type="Double">
+            <default>0</default>
+        </entry>
+        <entry name="lyricsLineHeight" type="Double">
+            <default>1.25</default>
+        </entry>
+        <entry name="lyricsAlign" type="String">
+            <default>left</default>
+        </entry>
+        <entry name="lyricsHighlight" type="String">
+            <default>text</default>
+        </entry>
+        <entry name="lyricsHighlightColor" type="Color">
+            <default>#3daee9</default>
+        </entry>
+        <entry name="lyricsPastOpacity" type="Double">
+            <default>0.55</default>
+        </entry>
+        <entry name="lyricsFutureOpacity" type="Double">
+            <default>0.55</default>
+        </entry>
+        <entry name="lyricsTextStyle" type="String">
+            <default>none</default>
+        </entry>
+        <entry name="lyricsTextStyleColor" type="Color">
+            <default>#101318</default>
+        </entry>
+        <entry name="lyricsLineSpacing" type="Int">
+            <default>12</default>
+        </entry>
+        <entry name="lyricsPadding" type="Int">
+            <default>18</default>
+        </entry>
+        <entry name="lyricsMaxWidth" type="Int">
+            <default>600</default>
+        </entry>
+        <entry name="lyricsFollow" type="Bool">
+            <default>true</default>
+        </entry>
+        <entry name="lyricsFollowPosition" type="String">
+            <default>center</default>
+        </entry>
+        <entry name="lyricsShowScrollbar" type="Bool">
+            <default>true</default>
+        </entry>
+        <entry name="lyricsShowHeader" type="Bool">
+            <default>false</default>
+        </entry>
+        <entry name="lyricsWidth" type="Int">
+            <default>380</default>
+        </entry>
+        <entry name="lyricsHeight" type="Int">
+            <default>320</default>
+        </entry>
+        <entry name="lyricsOffset" type="Double">
+            <default>0</default>
+        </entry>
+        <entry name="hoverDetails" type="String">
+            <default>off</default>
+        </entry>
+        <entry name="detailFields" type="StringList">
+            <default>album,genre,format,player</default>
+        </entry>
+        <entry name="idleText" type="Bool">
+            <default>false</default>
+        </entry>
+        <entry name="idleAmbient" type="Bool">
+            <default>false</default>
+        </entry>
+        <entry name="dimWhenPaused" type="Bool">
+            <default>false</default>
+        </entry>
+        <entry name="fadeVizWhenPaused" type="Bool">
+            <default>false</default>
+        </entry>
+        <entry name="hoverLift" type="Bool">
+            <default>false</default>
+        </entry>
+        <entry name="scrollVolume" type="Bool">
+            <default>false</default>
+        </entry>
+        <entry name="reducedMotion" type="Bool">
+            <default>false</default>
+        </entry>
+        <entry name="batterySaver" type="Bool">
+            <default>false</default>
+        </entry>
+        <entry name="simpleRender" type="Bool">
+            <default>false</default>
+        </entry>
+        <entry name="userPresets" type="String">
+            <default></default>
+        </entry>
     </group>
 </kcfg>

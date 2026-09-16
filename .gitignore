@@ -1,6 +1,9 @@
 # Build artifacts
 *.plasmoid
+# Generated browser assets; originals live in package/contents/ui/studio.
+docs/website/assets/studio/
 notes.md
+redesign-plan.md
 
 # Python caches
 __pycache__/

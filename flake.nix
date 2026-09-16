@@ -36,7 +36,7 @@
 
             meta = with pkgs.lib; {
               description = "Plasma 6 audio visualizer widget (cava-backed)";
-              license = licenses.mit;
+              license = licenses.gpl3Plus;
               platforms = platforms.linux;
               homepage = "https://github.com/muddyblack/kde-audio-visualizer";
             };
